@@ -1,0 +1,84 @@
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"Noto Sans CJK SC, DejaVu Sans, sans-serif","primaryColor":"#fff7ed","primaryTextColor":"#18181b","primaryBorderColor":"#fdba74","lineColor":"#a1a1aa","fontSize":"15px"}}}%%
+flowchart TB
+    ROOT["<b>MusicGo</b> · 原生 GPU 音乐播放器<br/><i>Go + MyGo · 无 Electron / 无 WebView / 无 Node.js</i>"]
+
+    subgraph DISCOVER["发现音乐"]
+        direction LR
+        D1["每日推荐<br/><i>插件接口 / 搜索回退</i>"]
+        D2["热门歌曲"]
+        D3["新歌"]
+        D4["经典 / 轻音乐"]
+        D5["快捷搜索标签"]
+        D6["为你推荐<br/><i>本地偏好 / 推荐理由</i>"]
+    end
+
+    subgraph SEARCH["搜索"]
+        direction LR
+        S1["跨插件并发搜索"]
+        S2["单曲 / 专辑<br/>歌单 / 歌手"]
+        S3["按音源来源筛选"]
+        S4["结果收藏"]
+    end
+
+    subgraph PLAY["播放"]
+        direction LR
+        P1["播放 / 暂停"]
+        P2["上一首 / 下一首"]
+        P3["播放模式<br/><i>顺序·循环·单曲·随机</i>"]
+        P4["进度条拖拽定位"]
+        P5["音量控制"]
+        P6["播放队列抽屉"]
+        P7["均衡器<br/>+ 播放速度"]
+        P8["多音源自动换源降级"]
+    end
+
+    subgraph LYRIC["歌词"]
+        direction LR
+        L1["全屏歌词页"]
+        L2["桌面悬浮歌词窗"]
+        L3["歌词翻译<br/>offset 校正"]
+    end
+
+    subgraph LIB["媒体库"]
+        direction LR
+        M1["我喜欢（收藏）"]
+        M2["最近播放"]
+        M3["自建歌单"]
+        M4["列表过滤"]
+    end
+
+    subgraph PLUG["插件生态"]
+        direction LR
+        G1["本地安装"]
+        G2["网络安装"]
+        G3["音源测试"]
+        G4["一键清理失效插件"]
+        G5["插件卸载"]
+    end
+
+    subgraph SYS["系统集成"]
+        direction LR
+        Y1["系统托盘菜单"]
+        Y2["全局快捷键"]
+        Y3["播放通知"]
+        Y4["数据备份<br/><i>MusicFree 兼容</i>"]
+    end
+
+    ROOT --> DISCOVER
+    ROOT --> SEARCH
+    ROOT --> PLAY
+    ROOT --> LYRIC
+    ROOT --> LIB
+    ROOT --> PLUG
+    ROOT --> SYS
+
+    FLOW["<b>主流程</b>： 插件生态 → 搜索 / 发现 → 播放 → 歌词 → 媒体库 → 再次播放"]
+    FLOW -.-> PLUG
+
+    classDef root fill:#ea580c,stroke:#c2410c,stroke-width:2px,color:#ffffff
+    classDef flow fill:#fff7ed,stroke:#fdba74,stroke-dasharray: 4 3,color:#7c2d12
+    classDef leaf fill:#ffffff,stroke:#e4e4e7,color:#3f3f46
+
+    class ROOT root
+    class FLOW flow
+    class D1,D2,D3,D4,D5,D6,S1,S2,S3,S4,P1,P2,P3,P4,P5,P6,P7,P8,L1,L2,L3,M1,M2,M3,M4,G1,G2,G3,G4,G5,Y1,Y2,Y3,Y4 leaf

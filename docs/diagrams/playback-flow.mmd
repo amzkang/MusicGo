@@ -1,0 +1,34 @@
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"Noto Sans CJK SC, DejaVu Sans, sans-serif","primaryColor":"#fff7ed","primaryTextColor":"#18181b","primaryBorderColor":"#fdba74","lineColor":"#a1a1aa","fontSize":"15px"}}}%%
+flowchart LR
+    U["用户点击歌曲"] --> E["Engine.PlaySong<br/><i>epoch 递增 + 取消上一次加载</i>"]
+    E --> PM["plugin.Manager.GetMediaSource"]
+    PM --> JS["goja 插件 VM<br/><i>esbuild 转译 · eventloop</i>"]
+    JS -->|URL + 自定义 Header| DEC{"解码路径"}
+
+    DEC -->|"优先"| FF["FFmpegDecoder<br/><i>ffmpeg 子进程 → f32le PCM</i>"]
+    DEC -->|"回退"| ST["HTTPStreamer<br/><i>Range 请求 + 本地缓存</i>"]
+
+    FF --> PL["audio.Player"]
+    ST --> PL
+    PL --> OUT["系统音频输出"]
+
+    PL -.PCM 采样.-> SH["shapedDecoder"]
+    SH --> EQ["Equalizer<br/><i>4 段 biquad 峰值滤波</i>"]
+    SH --> FFT["Visualizer<br/><i>1024 点 FFT → 频谱条</i>"]
+    EQ --> PL
+
+    FF -. ffprobe 并行探测时长 .-> DUR["真实 Duration"]
+    DUR --> PL
+
+    E -. 事件回调 .-> EV["onSongChange / onStateChange / onProgress"]
+    EV --> HIST["store.AddHistory<br/><i>后台 goroutine</i>"]
+    EV --> LRC["plugin.GetLyric → lyric.Parse"]
+    EV --> UI["UI 重绘<br/><i>invalidate</i>"]
+
+    classDef main fill:#fff7ed,stroke:#f97316,stroke-width:2px,color:#7c2d12
+    classDef sub fill:#ffffff,stroke:#d4d4d8,color:#27272a
+    classDef side fill:#f8fafc,stroke:#cbd5e1,color:#334155
+
+    class E main
+    class PM,JS,DEC,FF,ST,PL,EQ,FFT,DUR sub
+    class U,OUT,EV,HIST,LRC,UI side

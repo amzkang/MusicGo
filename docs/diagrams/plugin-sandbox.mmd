@@ -1,0 +1,26 @@
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"Noto Sans CJK SC, DejaVu Sans, sans-serif","primaryColor":"#fff7ed","primaryTextColor":"#18181b","primaryBorderColor":"#fdba74","lineColor":"#a1a1aa","fontSize":"15px"}}}%%
+flowchart LR
+    subgraph HOST["宿主应用 MusicGo（Go）"]
+        direction TB
+        A1["plugin.Manager"]
+        A2["goja Runtime + eventloop"]
+        A3["polyfill 层<br/><i>axios / cheerio / crypto-js …</i>"]
+        A4["MusicFree 插件<br/><i>musicfree-plugins/*.js</i>"]
+    end
+
+    subgraph NPM["被替代的 Node 生态"]
+        direction TB
+        N1["node_modules<br/>axios · cheerio · crypto-js"]
+        N2["Node.js 运行时"]
+        N3["npm 安装 / 版本冲突"]
+    end
+
+    A1 --> A2 --> A3 --> A4
+    A4 -. 语法转换 esbuild ES6+ → ES2017 .-> A2
+
+    classDef host fill:#fff7ed,stroke:#fdba74,color:#7c2d12
+    classDef nop fill:#fef2f2,stroke:#fca5a5,color:#7f1d1d
+    classDef mod fill:#ffffff,stroke:#d4d4d8,color:#27272a
+
+    class A1,A2,A3,A4 host
+    class N1,N2,N3 nop

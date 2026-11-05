@@ -1,0 +1,61 @@
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"Noto Sans CJK SC, DejaVu Sans, sans-serif","primaryColor":"#fff7ed","primaryTextColor":"#18181b","primaryBorderColor":"#fdba74","lineColor":"#a1a1aa","fontSize":"15px"}}}%%
+flowchart TB
+
+    subgraph UI["表现层 · internal/ui（MyGo 原生 GPU 渲染，无 WebView）"]
+        direction LR
+        UI1["App<br/><i>全局状态 / 导航 / 失效重绘</i>"]
+        UI2["views/<br/><i>发现 · 搜索 · 歌单 · 本地 · 插件 · 设置</i>"]
+        UI3["components/<br/><i>头部 · 侧栏 · 播放条 · 歌词面板</i>"]
+        UI4["lyric_win.go<br/><i>桌面悬浮歌词窗口</i>"]
+        UI5["image_cache.go<br/><i>异步封面解码 + LRU</i>"]
+        UI6["theme/<br/><i>亮/暗/自定义主题</i>"]
+    end
+
+    subgraph CORE["业务层"]
+        direction LR
+        C1["<b>player.Engine</b><br/><i>播放状态机 · 队列 · 事件总线 · EQ · FFT 频谱</i>"]
+        C2["<b>plugin.Manager</b><br/><i>多插件编排 · 并发搜索 · 音源测试</i>"]
+        C3["<b>lyric.Parser</b><br/><i>LRC 时间轴 · 翻译 · offset</i>"]
+        C4["<b>store.Store</b><br/><i>内存缓存 + SQLite 持久化</i>"]
+        C5["<b>sys</b><br/><i>托盘 · 全局快捷键 · 媒体通知</i>"]
+    end
+
+    subgraph CAP["能力层"]
+        direction LR
+        P1["<b>插件沙箱</b><br/>goja Runtime<br/>goja_nodejs/eventloop<br/>esbuild 转译"]
+        P2["<b>polyfill</b><br/>axios · cheerio<br/>crypto-js · he · qs<br/>dayjs · big-integer"]
+        P3["<b>音频</b><br/>ffmpeg 子进程解码<br/>HTTP Range 流缓冲<br/>mygo audio (mp3/vorbis)"]
+        P4["<b>存储</b><br/>modernc.org/sqlite<br/><i>CGO-free</i>"]
+        P5["<b>网络</b><br/>net/http<br/>PuerkitoBio/goquery"]
+    end
+
+    subgraph PLAT["平台层 · MyGo v0.7.3（purego，无 CGO）"]
+        direction LR
+        T1["GTK 3 / X11 / Wayland<br/>窗口 · 托盘 · 通知"]
+        T2["GPU 渲染<br/>OpenGL · Metal · D3D11"]
+        T3["音频输出<br/>PulseAudio/ALSA<br/>CoreAudio<br/>WASAPI"]
+        T4["全局快捷键<br/>XGrabKey / XDG Portal"]
+    end
+
+    UI --> CORE
+    CORE --> CAP
+    CAP --> PLAT
+
+    C1 --> P3
+    C1 --> P1
+    C2 --> P1
+    C2 --> P2
+    C2 --> P5
+    C4 --> P4
+    C3 -.解析.-> C1
+
+    classDef ui fill:#eff6ff,stroke:#93c5fd,color:#1e3a8a
+    classDef core fill:#fff7ed,stroke:#fdba74,color:#7c2d12
+    classDef cap fill:#f0fdf4,stroke:#86efac,color:#14532d
+    classDef plat fill:#faf5ff,stroke:#d8b4fe,color:#581c87
+    classDef pkg fill:#ffffff,stroke:#d4d4d8,color:#27272a
+
+    class UI1,UI2,UI3,UI4,UI5,UI6 ui
+    class C1,C2,C3,C4,C5 core
+    class P1,P2,P3,P4,P5 pkg
+    class T1,T2,T3,T4 plat

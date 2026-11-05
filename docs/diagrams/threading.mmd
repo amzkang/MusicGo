@@ -1,0 +1,46 @@
+%%{init: {"theme":"base","themeVariables":{"fontFamily":"Noto Sans CJK SC, DejaVu Sans, sans-serif","primaryColor":"#fff7ed","primaryTextColor":"#18181b","primaryBorderColor":"#fdba74","lineColor":"#a1a1aa","fontSize":"15px"}}}%%
+flowchart TB
+    subgraph MAIN["主线程（MyGo / GTK 事件循环）"]
+        direction TB
+        M1["绘制界面<br/><i>ui.Context · Element</i>"]
+        M2["只读内存状态<br/><i>store 缓存 / engine 快照</i>"]
+        M3["轻量事件处理<br/><i>切页 · 选中 · 拖拽</i>"]
+    end
+
+    subgraph WORK["后台 Goroutine（绝不阻塞界面）"]
+        direction TB
+        W1["插件 JS 执行<br/><i>goja eventloop</i>"]
+        W2["网络请求<br/><i>axios polyfill / ffprobe</i>"]
+        W3["音频解码与播放<br/><i>ffmpeg 管道 / mygo audio</i>"]
+        W4["SQLite 写入<br/><i>history / favorites / playlists</i>"]
+        W5["封面下载与解码<br/><i>ImageCache</i>"]
+        W6["LRC 解析<br/><i>lyric.Parse</i>"]
+    end
+
+    subgraph SYNC["跨线程同步机制"]
+        direction TB
+        S1["sync.RWMutex<br/><i>store 缓存 / engine 状态</i>"]
+        S2["事件总线<br/><i>Add*Listener 扇出</i>"]
+        S3["epoch 世代号<br/><i>丢弃过期任务结果</i>"]
+        S4["requestRedraw<br/><i>合并重绘请求</i>"]
+    end
+
+    M1 <--> S1
+    M3 --> S4
+    S4 --> M1
+    W1 --> S2
+    W2 --> S2
+    W3 --> S2
+    W4 --> S1
+    W5 --> S4
+    W6 --> S1
+    S2 --> M1
+    S3 --> W1
+
+    classDef main fill:#eff6ff,stroke:#93c5fd,color:#1e3a8a
+    classDef work fill:#f0fdf4,stroke:#86efac,color:#14532d
+    classDef sync fill:#fff7ed,stroke:#fdba74,color:#7c2d12
+
+    class M1,M2,M3 main
+    class W1,W2,W3,W4,W5,W6 work
+    class S1,S2,S3,S4 sync
