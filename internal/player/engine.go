@@ -326,6 +326,14 @@ func (e *Engine) Quality() (requested, source string) {
 	return e.quality, e.sourceQuality
 }
 
+// KnownQualityDowngrade compares quality names for which the source reports
+// a definite level. Unknown plugin-specific names are left unclassified.
+func KnownQualityDowngrade(requested, source string) bool {
+	requestedRank := map[string]int{"low": 1, "standard": 2, "high": 3, "super": 4}[requested]
+	sourceRank := map[string]int{"aac": 1, "128": 1, "320": 2, "flac": 3, "hires": 4}[source]
+	return requestedRank > 0 && sourceRank > 0 && sourceRank < requestedRank
+}
+
 func (e *Engine) SetQuality(quality string) {
 	switch quality {
 	case "low", "standard", "high", "super":
@@ -561,7 +569,7 @@ func (e *Engine) playSongInput(song plugin.MusicItem, expected *uint64, cached *
 		e.mu.Unlock()
 		e.playbackChanged()
 		// A known downgrade must not occupy the requested-quality cache entry.
-		downgraded := actualSong.Platform == "酷狗概念版" && quality != "low" && sourceQuality == "128"
+		downgraded := KnownQualityDowngrade(quality, sourceQuality)
 		if !direct && !downgraded && cache != nil && isRemoteURL(mediaURL) && !strings.Contains(strings.ToLower(mediaURL), ".m3u") && !strings.Contains(strings.ToLower(mediaURL), ".mpd") {
 			if actualSong.Key() != song.Key() {
 				if path, release := cache.Lookup(ctx, actualSong, quality); path != "" {
@@ -1437,7 +1445,7 @@ func (e *Engine) startPrefetchLocked() {
 
 // fallbackMediaSource attempts to resolve a playable source from other installed plugins
 func (e *Engine) fallbackMediaSource(parent context.Context, song plugin.MusicItem, quality string) (*plugin.MediaSource, *plugin.MusicItem) {
-	if e.pluginMgr == nil || song.Title == "" {
+	if e.pluginMgr == nil || song.Title == "" || e.pluginMgr.DiscoveryPlatform() != "" {
 		return nil, nil
 	}
 	ctx, cancel := context.WithTimeout(parent, 8*time.Second)
@@ -1448,18 +1456,29 @@ func (e *Engine) fallbackMediaSource(parent context.Context, song plugin.MusicIt
 		query += " " + song.Artist
 	}
 
-	results, err := e.pluginMgr.Search(ctx, query, 1, "music")
+	var platforms []string
+	for _, meta := range e.pluginMgr.ListPlugins() {
+		if meta.Platform != song.Platform {
+			platforms = append(platforms, meta.Platform)
+		}
+	}
+	if len(platforms) == 0 {
+		return nil, nil
+	}
+	results, err := e.pluginMgr.Search(ctx, query, 1, "music", platforms...)
 	if err != nil || len(results) == 0 {
 		return nil, nil
 	}
 
+	normalize := func(s string) string { return strings.ToLower(strings.Join(strings.Fields(s), " ")) }
 	for _, cand := range results {
 		if cand.Platform == song.Platform || cand.Platform == "" {
 			continue
 		}
-		cleanCand := strings.ToLower(strings.TrimSpace(cand.Title))
-		cleanSong := strings.ToLower(strings.TrimSpace(song.Title))
-		if !strings.Contains(cleanCand, cleanSong) && !strings.Contains(cleanSong, cleanCand) {
+		if normalize(cand.Title) != normalize(song.Title) {
+			continue
+		}
+		if song.Artist != "" && song.Artist != "未知歌手" && normalize(cand.Artist) != normalize(song.Artist) {
 			continue
 		}
 		media, mErr := e.pluginMgr.GetMediaSource(ctx, cand, quality)

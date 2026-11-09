@@ -2,7 +2,6 @@ package components
 
 import (
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/egoist/mygo/ui"
@@ -51,25 +50,7 @@ func (s *PlayerBarState) Position(eng *player.Engine) float64 {
 	return eng.Position()
 }
 
-// RenderPlayerBar renders the modern native MyGo bottom playback bar with artwork and smooth controls
-// formatPlatformTag normalizes platform names into a compact badge label
-func formatPlatformTag(plat string) string {
-	if plat == "" {
-		return ""
-	}
-	for _, sep := range []string{"(", "（", "-", "·", "["} {
-		if idx := strings.Index(plat, sep); idx != -1 {
-			plat = plat[:idx]
-		}
-	}
-	plat = strings.TrimSpace(plat)
-	runes := []rune(plat)
-	if len(runes) > 4 {
-		plat = string(runes[:4])
-	}
-	return plat
-}
-
+// RenderPlayerBar renders the native playback controls.
 func RenderPlayerBar(
 	c *ui.Context,
 	th *theme.Theme,
@@ -153,7 +134,7 @@ func RenderPlayerBar(
 
 			filled := r.W * float32(ratio)
 			if filled > 0 {
-				p.Fill(ui.Rect{X: r.X, Y: y, W: filled, H: trackH}, th.Primary, trackH/2)
+				p.Fill(ui.Rect{X: r.X, Y: y, W: filled, H: trackH}, th.ProgressColor(), trackH/2)
 			}
 		})
 		if x, _, over := seekSlider.PointerPosition(); over && dur > 0 {
@@ -256,9 +237,6 @@ func RenderPlayerBar(
 									TextColor(th.TextMain).
 									SingleLine().
 									ContentTransition(ui.ContentTransition{})
-								if curSong.Platform != "" {
-									ui.Badge(c, curSong.Platform)
-								}
 							})
 
 							artist := curSong.Artist
@@ -303,7 +281,7 @@ func RenderPlayerBar(
 					modeIcon := icons.Repeat
 					modeTip := "列表循环"
 					mode := eng.Mode()
-					modeColor := th.Primary
+					modeColor := th.PrimaryText()
 					if mode == player.ModeSequence {
 						modeColor = th.TextMain
 					}
@@ -377,7 +355,8 @@ func RenderPlayerBar(
 							playIcon = icons.Pause
 							iconMarginLeft = 0
 						}
-						playBackground, playForeground := th.Primary, th.OnPrimary()
+						buttonTheme := th.PlaybackButtonTheme(t)
+						playBackground, playForeground := buttonTheme.Accent, buttonTheme.AccentText
 						playBtn := ui.ButtonBase(c.Key("btn_play_pause")).
 							Label("btn_play_pause").
 							Size(40, 40).
@@ -389,7 +368,7 @@ func RenderPlayerBar(
 							Transition(ui.ElementTransition{Colors: true, Duration: 150 * time.Millisecond, Ease: ui.EaseOut})
 
 						if playBtn.Hovered() {
-							playBtn.Background(t.AccentHover)
+							playBtn.Background(buttonTheme.AccentHover)
 						}
 						// It leans into the pointer, and gives under it
 						// while the click is held.
@@ -502,7 +481,7 @@ func RenderPlayerBar(
 						lrcBtn.Children(func() {
 							lrcCol := th.TextMain
 							if state.DesktopLyricsVisible {
-								lrcCol = th.Primary
+								lrcCol = th.PrimaryText()
 							}
 							ui.Text(c, "词").
 								FontSize(16).Bold().
@@ -532,7 +511,7 @@ func RenderPlayerBar(
 						queueBtn.Children(func() {
 							qCol := th.TextMain
 							if state.Queue.Open {
-								qCol = th.Primary
+								qCol = th.PrimaryText()
 							}
 							ui.Icon(c, icons.Playlist).Size(16, 16).TextColor(qCol)
 						})
@@ -540,7 +519,13 @@ func RenderPlayerBar(
 							state.Queue.Open = !state.Queue.Open
 						}
 
-						renderQueueDrawer(c, th, queueBtn, eng, &state.Queue, getImage, st, redraw, barHeight)
+						queueTheme := th
+						if state.ShowLyrics {
+							palette := *th
+							palette.CardBg = ui.Hex("#343434")
+							queueTheme = &palette
+						}
+						renderQueueDrawer(c, queueTheme, queueBtn, eng, &state.Queue, getImage, st, redraw, barHeight)
 					})
 			})
 	})

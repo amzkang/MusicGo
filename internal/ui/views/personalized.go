@@ -79,21 +79,6 @@ func RenderPersonalized(c *ui.Context, th *theme.Theme, page *PersonalizedPageSt
 		ui.Column(c).FillWidth().Gap(gap).Children(func() {
 			ui.Row(c).FillWidth().Height(36).AlignItems(ui.Center).Gap(12).Children(func() {
 				ui.Spacer(c)
-				sourceLabel := "全部音源"
-				if snap.Source != "" {
-					sourceLabel = shortPlatformName(snap.Source)
-				}
-				source := personalTextButton(c.Key("personal_source"), th, sourceLabel)
-				source.Menu(func(m *ui.Menu) {
-					if m.Item("全部音源").Checked(snap.Source == "").Chosen() {
-						page.Data.SetSource("", pm, st, redraw)
-					}
-					for _, entry := range snap.Sources {
-						if m.Item(entry.Name).Checked(snap.Source == entry.Name).Chosen() {
-							page.Data.SetSource(entry.Name, pm, st, redraw)
-						}
-					}
-				})
 				settings := personalTextButton(c.Key("personal_settings"), th, "推荐设置")
 				if settings.Clicked() {
 					page.draft = snap.Settings
@@ -367,15 +352,8 @@ func (page *PersonalizedPageState) renderStatus(c *ui.Context, th *theme.Theme, 
 	for _, src := range s.Sources {
 		failed = failed || src.Failed
 	}
-	if failed {
-		b := personalTextButton(c.Key("personal_source_failures"), th, "部分音源未更新")
-		b.Menu(func(m *ui.Menu) {
-			for _, src := range s.Sources {
-				if src.Failed && m.Item("重试 "+src.Name).Chosen() {
-					page.Data.RetrySource(src.Name, pm, st, redraw)
-				}
-			}
-		})
+	if failed && personalTextButton(c.Key("personal_source_failures"), th, "重试更新").Clicked() {
+		page.Data.Retry(pm, st, redraw)
 	}
 }
 
@@ -508,7 +486,7 @@ func (page *PersonalizedPageState) renderSettings(c *ui.Context, th *theme.Theme
 					}
 				}
 			})
-			ui.Text(c, "关键词会交给所选音源搜索；留空时从喜欢的歌手继续发现。").FontSize(12).TextColor(th.TextSub)
+			ui.Text(c, "输入关键词探索歌曲；留空时从喜欢的歌手继续发现。").FontSize(12).TextColor(th.TextSub)
 			if page.settingsError != "" {
 				ui.Text(c, page.settingsError).FontSize(12).TextColor(th.Danger)
 			}
@@ -517,7 +495,7 @@ func (page *PersonalizedPageState) renderSettings(c *ui.Context, th *theme.Theme
 					page.manageExcluded = true
 				}
 				ui.Spacer(c)
-				if components.PrimaryButton(c.Key("personal_settings_save"), "保存").Clicked() {
+				if components.PrimaryButton(c.Key("personal_settings_save"), th, "保存").Clicked() {
 					page.draft.Keywords = personalKeywords(page.keywords)
 					if err := page.Data.UpdateSettings(page.draft, redraw); err != nil {
 						page.settingsError = err.Error()

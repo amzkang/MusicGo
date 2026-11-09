@@ -38,7 +38,9 @@ type AccountViewState struct {
 	songSeq   uint64
 	songCtx   context.CancelFunc
 
-	rev uint64
+	rev        uint64
+	refreshSeq uint64
+	preferred  string
 
 	// Scroll positions belong to the UI thread, independently of async data.
 	sheetsScroll ui.ScrollState
@@ -70,17 +72,24 @@ type AccountChipData struct {
 
 // MaybeRefresh reloads the account state once per plugin revision: profile,
 // sheets and the open sheet's songs. It is cheap when nothing changed.
-func (s *AccountViewState) MaybeRefresh(pm *plugin.Manager, invalidate func()) {
+func (s *AccountViewState) MaybeRefresh(pm *plugin.Manager, cm *store.ConfigManager, invalidate func()) {
 	if pm == nil {
 		return
 	}
+	preferred := ""
+	if cm != nil {
+		preferred = cm.AccountPlatformValue()
+	}
 	s.mu.Lock()
 	rev := pm.Revision()
-	if s.rev == rev {
+	if s.rev == rev && s.preferred == preferred {
 		s.mu.Unlock()
 		return
 	}
 	s.rev = rev
+	s.preferred = preferred
+	s.refreshSeq++
+	seq := s.refreshSeq
 	s.mu.Unlock()
 
 	go func() {
@@ -89,18 +98,21 @@ func (s *AccountViewState) MaybeRefresh(pm *plugin.Manager, invalidate func()) {
 		var vars map[string]string
 		for _, meta := range pm.ListPlugins() {
 			stored := pm.StoredUserVars(meta.Platform)
-			if pm.SupportsAccountData(meta.Platform) && len(stored) > 0 {
+			if pm.SupportsAccountData(meta.Platform) && len(stored) > 0 && (platform == "" || meta.Platform == preferred) {
 				platform = meta.Platform
 				vars = stored
+				logo = ""
 				if v, ok := meta.Hints["logo"].(string); ok {
 					logo = v
 				}
-				break
+				if platform == preferred {
+					break
+				}
 			}
 		}
 
 		s.mu.Lock()
-		if s.rev != rev || pm.Revision() != rev {
+		if s.refreshSeq != seq || pm.Revision() != rev {
 			s.mu.Unlock()
 			return
 		}
@@ -145,7 +157,7 @@ func (s *AccountViewState) MaybeRefresh(pm *plugin.Manager, invalidate func()) {
 			profile, err := pm.GetUserProfile(ctx, platform)
 			cancel()
 			s.mu.Lock()
-			if s.rev != rev || pm.Revision() != rev {
+			if s.refreshSeq != seq || pm.Revision() != rev {
 				s.mu.Unlock()
 				return
 			}
@@ -166,7 +178,7 @@ func (s *AccountViewState) MaybeRefresh(pm *plugin.Manager, invalidate func()) {
 		cancel()
 
 		s.mu.Lock()
-		if s.rev != rev || pm.Revision() != rev {
+		if s.refreshSeq != seq || pm.Revision() != rev {
 			s.mu.Unlock()
 			return
 		}
@@ -191,19 +203,19 @@ func (s *AccountViewState) MaybeRefresh(pm *plugin.Manager, invalidate func()) {
 			s.reloadOpenSheet(pm, open, invalidate)
 		}
 		if serr == nil {
-			go s.loadMissingSheetCovers(pm, platform, rev, sheets, invalidate)
+			go s.loadMissingSheetCovers(pm, platform, rev, seq, sheets, invalidate)
 		}
 	}()
 }
 
 // loadMissingSheetCovers fetches only the first page, off the UI thread.
-func (s *AccountViewState) loadMissingSheetCovers(pm *plugin.Manager, platform string, rev uint64, sheets []plugin.UserSheet, invalidate func()) {
+func (s *AccountViewState) loadMissingSheetCovers(pm *plugin.Manager, platform string, rev, seq uint64, sheets []plugin.UserSheet, invalidate func()) {
 	for _, sheet := range sheets {
 		if sheet.CoverImg != "" {
 			continue
 		}
 		s.mu.RLock()
-		valid := s.rev == rev && s.platform == platform && pm.Revision() == rev
+		valid := s.refreshSeq == seq && s.platform == platform && pm.Revision() == rev
 		s.mu.RUnlock()
 		if !valid {
 			return
@@ -215,7 +227,7 @@ func (s *AccountViewState) loadMissingSheetCovers(pm *plugin.Manager, platform s
 			continue
 		}
 		s.mu.Lock()
-		if s.rev != rev || s.platform != platform || pm.Revision() != rev {
+		if s.refreshSeq != seq || s.platform != platform || pm.Revision() != rev {
 			s.mu.Unlock()
 			return
 		}
@@ -431,12 +443,13 @@ func RenderAccountLibrary(
 	state *AccountViewState,
 	eng *player.Engine,
 	pm *plugin.Manager,
+	cm *store.ConfigManager,
 	st *store.Store,
 	dl *download.Manager,
 	getImage func(string) *ui.Bitmap,
 	invalidate func(),
 ) {
-	state.MaybeRefresh(pm, invalidate)
+	state.MaybeRefresh(pm, cm, invalidate)
 	chip := state.Chip()
 	if chip == nil {
 		ui.Column(c).Fill().Center().Gap(10).Children(func() {
@@ -465,14 +478,14 @@ func renderAccountSheetsHome(c *ui.Context, th *theme.Theme, state *AccountViewS
 					return
 				}
 				if bm := getImage(chip.Logo); bm != nil {
-					ui.Image(c, bm).Size(64, 64).Radius(32).Fit(ui.Cover)
+					avatar.Radius(16)
+					ui.Image(c, bm).Size(64, 64).Radius(16).Fit(ui.Contain)
 					return
 				}
 				ui.Icon(c, icons.Headphone).Size(30, 30).TextColor(th.TextSub)
 			})
 			ui.Column(c).Grow(1).MinWidth(0).Gap(8).Children(func() {
 				ui.Row(c).AlignItems(ui.Center).Gap(10).Children(func() {
-					ui.Badge(c, chip.Platform)
 					components.PageTitle(c, th, chip.Nickname).Grow(1)
 				})
 				sub := fmt.Sprintf("云端歌单 %d 个", len(sheets))
@@ -567,7 +580,6 @@ func renderAccountSheet(c *ui.Context, th *theme.Theme, state *AccountViewState,
 
 			ui.Column(c).Grow(1).MinWidth(0).Gap(8).Children(func() {
 				ui.Row(c).AlignItems(ui.Center).Gap(10).Children(func() {
-					ui.Badge(c, chip.Platform)
 					components.PageTitle(c, th, title).Grow(1)
 				})
 				count := 0
@@ -579,7 +591,7 @@ func renderAccountSheet(c *ui.Context, th *theme.Theme, state *AccountViewState,
 				if songs != nil && !songs.isEnd {
 					playLabel = "播放已加载"
 				}
-				playAll := components.PrimaryButton(c, playLabel).AlignSelf(ui.Start).Disabled(eng == nil || songs == nil || len(songs.items) == 0)
+				playAll := components.PrimaryButton(c, th, playLabel).AlignSelf(ui.Start).Disabled(eng == nil || songs == nil || len(songs.items) == 0)
 				if playAll.Clicked() && eng != nil && songs != nil && len(songs.items) > 0 {
 					eng.SetQueue(songs.items, 0)
 				}

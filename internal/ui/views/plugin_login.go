@@ -1,7 +1,15 @@
 package views
 
 import (
+	"bytes"
 	"context"
+	"fmt"
+	"image"
+	_ "image/jpeg"
+	_ "image/png"
+	"io"
+	"net/http"
+	"net/url"
 	"time"
 
 	qrcode "github.com/skip2/go-qrcode"
@@ -153,8 +161,7 @@ func beginPluginLogin(state *PluginManagerViewState, pm *plugin.Manager, configM
 	go runPluginLogin(state, pm, configMgr, platform, seq, invalidate)
 }
 
-// runPluginLogin fetches the QR text, renders it as a bitmap and starts
-// polling.
+// runPluginLogin obtains the QR bitmap and starts polling in the background.
 func runPluginLogin(state *PluginManagerViewState, pm *plugin.Manager, configMgr *store.ConfigManager, platform string, seq uint64, invalidate func()) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	qr, err := pm.GetLoginQR(ctx, platform)
@@ -168,7 +175,18 @@ func runPluginLogin(state *PluginManagerViewState, pm *plugin.Manager, configMgr
 		return
 	}
 
-	code, err := qrcode.New(qr.QRText, qrcode.Medium)
+	var picture image.Image
+	if qr.QRText != "" {
+		var code *qrcode.QRCode
+		code, err = qrcode.New(qr.QRText, qrcode.Medium)
+		if err == nil {
+			picture = code.Image(460)
+		}
+	} else {
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		picture, err = loadLoginQRImage(ctx, qr.QRImageURL)
+		cancel()
+	}
 	if err != nil {
 		if !state.LoginSeqCurrent(seq) {
 			return
@@ -177,7 +195,7 @@ func runPluginLogin(state *PluginManagerViewState, pm *plugin.Manager, configMgr
 		requestLoginRedraw(invalidate)
 		return
 	}
-	bitmap := ui.NewBitmap(code.Image(460))
+	bitmap := ui.NewBitmap(picture)
 	bitmap.Pixelated()
 	if !state.LoginSeqCurrent(seq) {
 		return
@@ -190,6 +208,37 @@ func runPluginLogin(state *PluginManagerViewState, pm *plugin.Manager, configMgr
 	requestLoginRedraw(invalidate)
 
 	pollPluginLogin(state, pm, configMgr, platform, qr.State, seq, invalidate)
+}
+
+func loadLoginQRImage(ctx context.Context, address string) (image.Image, error) {
+	u, err := url.Parse(address)
+	if err != nil || u.Scheme != "https" || u.Host == "" {
+		return nil, fmt.Errorf("二维码图片地址无效")
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, address, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Referer", u.Scheme+"://"+u.Host+"/")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("二维码图片请求失败：%s", resp.Status)
+	}
+	const maxQRBytes = 2 << 20
+	data, err := io.ReadAll(io.LimitReader(resp.Body, maxQRBytes+1))
+	if err != nil || len(data) > maxQRBytes {
+		return nil, fmt.Errorf("二维码图片读取失败或过大")
+	}
+	cfg, _, err := image.DecodeConfig(bytes.NewReader(data))
+	if err != nil || cfg.Width > 2048 || cfg.Height > 2048 {
+		return nil, fmt.Errorf("二维码图片格式无效或尺寸过大")
+	}
+	picture, _, err := image.Decode(bytes.NewReader(data))
+	return picture, err
 }
 
 // pollPluginLogin polls the plugin until the login is confirmed, the QR
@@ -242,22 +291,22 @@ func pollPluginLogin(state *PluginManagerViewState, pm *plugin.Manager, configMg
 // completePluginLogin persists the variables the plugin reported, reloads the
 // plugin with them and closes the modal.
 func completePluginLogin(state *PluginManagerViewState, pm *plugin.Manager, configMgr *store.ConfigManager, platform string, vars map[string]string, invalidate func()) {
+	accountData := pm.SupportsAccountData(platform)
 	if configMgr != nil {
 		_ = configMgr.UpdateAsync(func(cfg *store.AppConfig) {
 			if cfg.PluginVars == nil {
 				cfg.PluginVars = make(map[string]map[string]string)
 			}
 			cfg.PluginVars[platform] = vars
+			if accountData {
+				cfg.AccountPlatform = platform
+				cfg.LibraryMode = "account"
+			}
 		})
 	}
 	if len(vars) > 0 {
 		_, _ = pm.ApplyPluginVars(platform, vars)
 	}
-	// 登录的是账号数据插件时，「我的音乐」直接进入账号模式
-	if configMgr != nil && pm.SupportsAccountData(platform) {
-		_ = configMgr.UpdateAsync(func(cfg *store.AppConfig) { cfg.LibraryMode = "account" })
-	}
-
 	msg := "已登录"
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	if status, err := pm.GetLoginStatus(ctx, platform); err == nil && status != nil && status.Message != "" {
@@ -277,7 +326,8 @@ func logoutPlugin(state *PluginManagerViewState, pm *plugin.Manager, configMgr *
 		if configMgr != nil {
 			_ = configMgr.UpdateAsync(func(cfg *store.AppConfig) {
 				delete(cfg.PluginVars, platform)
-				if cfg.LibraryMode == "account" {
+				if cfg.AccountPlatform == platform || cfg.AccountPlatform == "" {
+					cfg.AccountPlatform = ""
 					cfg.LibraryMode = "local"
 				}
 			})
@@ -343,42 +393,44 @@ func renderLoginModal(c *ui.Context, th *theme.Theme, state *PluginManagerViewSt
 
 	ui.Modal(c, &state.ShowLoginModal, func() {
 		platform, phase, msg, bitmap := state.LoginSnapshot()
-		ui.Column(c.Key("plugin_login_modal")).Label("扫码登录弹窗").Width(320).Gap(14).Children(func() {
-			ui.Text(c, platform).FontSize(17).Bold().TextColor(th.TextMain).SingleLine().Ellipsis("…")
+		ui.Column(c.Key("plugin_login_modal")).Label("扫码登录弹窗").Width(280).Gap(16).Children(func() {
+			ui.Text(c, "登录 "+platform).FillWidth().TextAlign(ui.Center).FontSize(18).Bold().TextColor(th.TextMain).SingleLine().Ellipsis("…")
 
-			switch phase {
-			case loginPhaseLoading:
-				ui.Box(c).Size(220, 220).Radius(12).Background(th.HoverBg).Center().Children(func() {
-					ui.Text(c, "正在获取二维码...").FontSize(13).TextColor(th.TextSub)
-				})
-			case loginPhaseError, loginPhaseExpired:
-				// 详细原因只显示在下方状态行，这里放一个占位图标
-				ui.Box(c).Size(220, 220).Radius(12).Background(th.HoverBg).Center().Children(func() {
-					ui.Icon(c, icons.Plugin).Size(32, 32).TextColor(th.TextMuted)
-				})
-			default:
-				ui.Box(c).Size(220, 220).Radius(12).Background(ui.Hex("#ffffff")).Center().Children(func() {
-					if bitmap != nil {
-						ui.Image(c, bitmap).Size(204, 204)
-					}
-				})
-			}
+			ui.Row(c).FillWidth().Justify(ui.Center).Children(func() {
+				switch phase {
+				case loginPhaseLoading:
+					ui.Box(c).Size(220, 220).Radius(12).Background(th.HoverBg).Center().Children(func() {
+						ui.Text(c, "正在获取二维码...").FontSize(13).TextColor(th.TextSub)
+					})
+				case loginPhaseError, loginPhaseExpired:
+					ui.Box(c).Size(220, 220).Radius(12).Background(th.HoverBg).Center().Children(func() {
+						ui.Icon(c, icons.Plugin).Size(32, 32).TextColor(th.TextMuted)
+					})
+				default:
+					ui.Box(c).Size(220, 220).Radius(12).Background(ui.Hex("#ffffff")).Center().Children(func() {
+						if bitmap != nil {
+							ui.Image(c, bitmap).Size(204, 204).Fit(ui.Contain)
+						}
+					})
+				}
+			})
 
 			statusCol := th.TextSub
 			switch phase {
 			case loginPhaseExpired, loginPhaseError:
 				statusCol = th.Danger
 			}
-			ui.Text(c, msg).FontSize(13).TextColor(statusCol).SingleLine().Ellipsis("…")
+			if msg != "" {
+				ui.Text(c, msg).FillWidth().TextAlign(ui.Center).FontSize(13).TextColor(statusCol).MaxLines(3).Ellipsis("…")
+			}
 
-			ui.Row(c).FillWidth().Gap(10).Children(func() {
+			ui.Row(c).FillWidth().Justify(ui.Center).Gap(10).Children(func() {
 				if phase != loginPhaseLoading {
 					refresh := components.Button(c.Key("login_refresh"), "刷新二维码")
 					if refresh.Clicked() && pm != nil {
 						beginPluginLogin(state, pm, configMgr, platform, invalidate)
 					}
 				}
-				ui.Spacer(c)
 				cancel := components.Button(c.Key("login_cancel"), "取消")
 				if cancel.Clicked() {
 					state.CloseLoginUI()

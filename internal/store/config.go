@@ -40,9 +40,10 @@ type AppConfig struct {
 	// LibraryMode tells whose library「我的音乐」shows: "local" keeps the
 	// on-device favorites and playlists, "account" the logged-in plugin's
 	// sheets. It falls back to "local" whenever no account is logged in.
-	LibraryMode    string          `json:"libraryMode,omitempty"`
-	EnabledPlugins []string        `json:"enabledPlugins"`
-	CustomTheme    *CustomThemeCfg `json:"customTheme,omitempty"`
+	LibraryMode     string          `json:"libraryMode,omitempty"`
+	AccountPlatform string          `json:"accountPlatform,omitempty"`
+	EnabledPlugins  []string        `json:"enabledPlugins"`
+	CustomTheme     *CustomThemeCfg `json:"customTheme,omitempty"`
 	// Nil preserves legacy precedence: custom colors apply outside dark mode.
 	// An explicit choice can select a built-in theme without deleting its preset.
 	UseCustomTheme *bool          `json:"useCustomTheme,omitempty"`
@@ -396,6 +397,12 @@ func (cm *ConfigManager) LibraryModeValue() string {
 		return "local"
 	}
 	return ""
+}
+
+func (cm *ConfigManager) AccountPlatformValue() string {
+	cm.mu.RLock()
+	defer cm.mu.RUnlock()
+	return cm.config.AccountPlatform
 }
 
 // Update modifies config and persists it

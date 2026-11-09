@@ -17,7 +17,7 @@ import (
 func sidebarItem(c *ui.Context, th *theme.Theme, selected, id string, icon *ui.SVG, label string) ui.Element {
 	color := th.TextMain
 	if selected == id {
-		color = th.Primary
+		color = th.PrimaryText()
 	}
 	// SidebarItem colors its icon explicitly, using different theme fields
 	// with and without focus. Keep both in sync with the label's state.

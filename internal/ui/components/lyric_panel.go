@@ -114,7 +114,7 @@ func timedLyricSpans(line lyric.Line, th *theme.Theme, pos float64) []ui.Span {
 	spans := make([]ui.Span, 0, len(line.Words))
 	for _, word := range line.Words {
 		progress := word.Progress(pos)
-		spans = append(spans, ui.Span{Text: word.Text, Color: th.TextSub.Mix(th.Primary, progress)})
+		spans = append(spans, ui.Span{Text: word.Text, Color: th.TextSub.Mix(th.PrimaryText(), progress)})
 	}
 	return spans
 }

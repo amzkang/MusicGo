@@ -35,8 +35,12 @@ func Button(c *ui.Context, label string) ui.Element {
 	return ui.Button(c, label).Height(36).Shrink(0).Radius(10).Padding(0, 16).Cursor(ui.CursorPointer)
 }
 
-func PrimaryButton(c *ui.Context, label string) ui.Element {
-	return ui.PrimaryButton(c, label).Height(36).Shrink(0).Radius(10).Padding(0, 16).Cursor(ui.CursorPointer)
+func PrimaryButton(c *ui.Context, th *theme.Theme, label string) ui.Element {
+	native := c.Theme()
+	c.SetTheme(th.ButtonTheme(native))
+	button := ui.PrimaryButton(c, label).Height(36).Shrink(0).Radius(10).Padding(0, 16).Cursor(ui.CursorPointer)
+	c.SetTheme(native)
+	return button
 }
 
 func IconButton(c *ui.Context, th *theme.Theme, label string, icon *ui.SVG, color ui.Color) ui.Element {
@@ -54,10 +58,11 @@ func HeroButton(c *ui.Context, palette *theme.Theme, label string, primary bool)
 	button := ui.ButtonBase(c).Label(label).Height(40).Padding(0, 18).Radius(20).Center().Cursor(ui.CursorPointer).FocusRing(false)
 	color := palette.TextMain
 	if primary {
-		color = palette.OnPrimary()
-		button.Background(palette.Primary)
+		buttonTheme := palette.ButtonTheme(palette.ToMyGoTheme())
+		color = buttonTheme.AccentText
+		button.Background(buttonTheme.Accent)
 		if button.Hovered() || button.Pressed() {
-			button.Background(palette.PrimaryState(.12))
+			button.Background(buttonTheme.AccentHover)
 		}
 	} else {
 		button.Border(1, palette.Border)

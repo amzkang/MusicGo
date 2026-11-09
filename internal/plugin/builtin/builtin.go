@@ -11,6 +11,12 @@ import _ "embed"
 //go:embed kugou_concept.js
 var KugouConcept []byte
 
+//go:embed qq_music.js
+var QQMusic []byte
+
+//go:embed qishui_music.js
+var QishuiMusic []byte
+
 // Platform is the platform the source exports; it is known up front, so the
 // stored user variables can be injected in one load, without the two-phase
 // load the file plugins need.

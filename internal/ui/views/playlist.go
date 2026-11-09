@@ -134,7 +134,7 @@ func RenderPlaylist(
 					}
 					ui.Text(c, countText).FontSize(12).TextColor(t.TextMuted)
 
-					playAllBtn := components.PrimaryButton(c, "播放全部").Disabled(len(songs) == 0 || eng == nil)
+					playAllBtn := components.PrimaryButton(c, th, "播放全部").Disabled(len(songs) == 0 || eng == nil)
 					if playAllBtn.Clicked() && len(songs) > 0 && eng != nil {
 						eng.SetQueue(songs, 0)
 					}

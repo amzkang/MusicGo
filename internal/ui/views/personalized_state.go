@@ -146,11 +146,27 @@ func (s *PersonalizedViewState) Snapshot() PersonalizedSnapshot {
 		Sources: append([]PersonalizedSource(nil), s.sources...),
 	}
 	out.Settings.Keywords = append([]string(nil), s.settings.Keywords...)
-	out.Batch = filterPersonalized(s.cache.Candidates, s.settings.Source)
+	source := ""
+	if s.pm != nil {
+		source = s.pm.DiscoveryPlatform()
+	}
+	visible := func(items []PersonalizedCandidate) []PersonalizedCandidate {
+		var allowed []PersonalizedCandidate
+		for _, item := range items {
+			for _, entry := range s.sources {
+				if item.Item.Platform == entry.Name {
+					allowed = append(allowed, item)
+					break
+				}
+			}
+		}
+		return filterPersonalized(allowed, source)
+	}
+	out.Batch = visible(s.cache.Candidates)
 	out.Candidates = clonePersonalizedCandidates(out.Batch)
 	if s.artist != nil {
 		detail := *s.artist
-		detail.Candidates = filterPersonalized(detail.Candidates, s.settings.Source)
+		detail.Candidates = visible(detail.Candidates)
 		detail.Songs = personalizedSongs(detail.Candidates)
 		out.Artist = &detail
 		out.Candidates = clonePersonalizedCandidates(detail.Candidates)
@@ -180,7 +196,7 @@ func searchablePersonalizedSources(pm *plugin.Manager) ([]PersonalizedSource, st
 	}
 	var out []PersonalizedSource
 	var signature []string
-	for _, meta := range pm.ListPlugins() {
+	for _, meta := range pm.DiscoveryPlugins() {
 		inst := pm.GetPlugin(meta.Platform)
 		if inst == nil || !inst.HasMethod("search") {
 			continue
@@ -408,9 +424,6 @@ func (s *PersonalizedViewState) begin(pm *plugin.Manager, st *store.Store, redra
 		retry: retry, retrySource: retrySource}
 	req.settings.Keywords = append([]string(nil), s.settings.Keywords...)
 	for _, source := range sources {
-		if req.settings.Source != "" && source.Name != req.settings.Source {
-			continue
-		}
 		if retrySource != "" && source.Name != retrySource {
 			continue
 		}
@@ -1021,9 +1034,7 @@ func (s *PersonalizedViewState) OpenArtist(name string, pm *plugin.Manager, st *
 	seq := s.artistSeq
 	var selected []string
 	for _, src := range sources {
-		if s.settings.Source == "" || s.settings.Source == src.Name {
-			selected = append(selected, src.Name)
-		}
+		selected = append(selected, src.Name)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	s.artistCancel = cancel

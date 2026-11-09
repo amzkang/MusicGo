@@ -90,7 +90,7 @@ SOFTWARE.
 
 ## 插件、外部程序与内容
 
-- `internal/plugin/builtin/kugou_concept.js` 是本项目内置的插件实现，按项目 MIT 许可提供。插件标识、接口地址和协议参数不代表获得第三方服务的授权或背书。
+- `internal/plugin/builtin/` 中的酷狗概念版、QQ 音乐和汽水音乐插件是本项目内置的实现，按项目 MIT 许可提供。插件标识、接口地址和协议参数不代表获得第三方服务的授权或背书。
 - 外部安装或导入的 MusicFree 插件不在本仓库分发范围内，遵循各自的许可。
 - FFmpeg / ffprobe 作为可选的外部程序调用，不随本仓库分发，其许可由所安装的发行版本决定。
 - 仓库不分发音乐、专辑封面、账号数据或系统字体。运行时取得的内容及第三方商标的权利归相应权利人所有。
@@ -98,3 +98,5 @@ SOFTWARE.
 ## 行为设计参考
 
 MusicFree / MusicFreeDesktop 的插件协议、备份格式与功能，以及 mygo-cloudmusic 的会话恢复、缓存和播放过渡行为，为本项目提供了参考。致谢不是对这些项目代码或素材的重新许可；直接引入第三方实现时，必须另外核对其原有许可并保留声明。
+
+汽水音乐的扫码与公开目录协议参考了 [lane128/mygo-music-qishui](https://github.com/lane128/mygo-music-qishui)（AGPL-3.0-only）和 [DaviRain-Su/mygo-music-qishui](https://github.com/DaviRain-Su/mygo-music-qishui) 的公开说明；本项目未包含这两个项目的源码或运行组件。

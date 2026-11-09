@@ -5,25 +5,27 @@ import (
 	"time"
 
 	"github.com/egoist/mygo/ui"
+	"musicgo/internal/plugin"
 	"musicgo/internal/ui/anim"
 	"musicgo/internal/ui/components"
 	"musicgo/internal/ui/icons"
 )
 
-const artworkSwipeDuration = 420 * time.Millisecond
+const artworkSwipeDuration = 340 * time.Millisecond
 
 // Pointer and animation state belong to the UI thread. A new generation drops
 // the native drag record when the song, window size or lyric mode changes.
 type artworkSwipeState struct {
-	offset     ui.Point
-	generation uint64
-	songKey    string
-	size       float32
-	immersive  bool
-	started    time.Time
-	from       float32
-	direction  float32
-	outgoing   *ui.Bitmap
+	offset       ui.Point
+	generation   uint64
+	songKey      string
+	size         float32
+	immersive    bool
+	started      time.Time
+	from         float32
+	direction    float32
+	previewScale float32
+	outgoing     *ui.Bitmap
 }
 
 func (s *artworkSwipeState) reset() {
@@ -63,24 +65,34 @@ func (app *App) renderArtworkCard(c *ui.Context, size float32) {
 		if c.Preferences().ReduceMotion || progress >= 1 {
 			s.reset()
 		} else {
-			// The old card leaves in the gesture's direction while its replacement
-			// slides out of the stack on the opposite side.
+			// The replacement rises from beneath the departing card.
 			ease := 1 - float32(math.Pow(float64(1-progress), 3))
 			x := s.from + (s.direction*size*1.15-s.from)*ease
-			paint(ui.Box(c.Key("artwork_outgoing")).Absolute().Left(0).Top(0).Fill().
-				Translate(x, 0).Rotate(max(-8, min(x/size*7, 8))).Scale(1-0.08*ease, 1-0.08*ease).Opacity(1-ease), s.outgoing)
+			scale := s.previewScale + (1-s.previewScale)*ease
 			paint(ui.Box(c.Key("artwork_incoming")).Absolute().Left(0).Top(0).Fill().
-				Translate(-s.direction*size*0.85*(1-ease), 0).
-				Scale(0.92+0.08*ease, 0.92+0.08*ease).Opacity(ease), bitmap)
+				Scale(scale, scale), bitmap)
+			paint(ui.Box(c.Key("artwork_outgoing")).Absolute().Left(0).Top(0).Fill().
+				Translate(x, 0).Rotate(max(-8, min(x/size*7, 8))).Opacity(1-ease*ease), s.outgoing)
 			c.AnimationFrame()
 			return
 		}
 	}
 
+	var preview ui.Element
+	var previous, next *plugin.MusicItem
+	if app.ShowFullScreenLyric && song != nil && !c.Now().Before(app.lyricMotionUntil) {
+		previous, next = app.Player.PreviousSongPreview(), app.Player.NextSongPreview()
+		for _, item := range []*plugin.MusicItem{previous, next} {
+			if item != nil && item.Artwork != "" {
+				app.Images.Get(item.Artwork)
+			}
+		}
+		preview = ui.Box(c.Key("artwork_preview")).Absolute().Left(0).Top(0).Fill().PassThrough()
+	}
 	card := ui.Box(c.Key(struct {
 		Name       string
 		Generation uint64
-	}{"artwork_card", s.generation})).Fill()
+	}{"artwork_card", s.generation})).Absolute().Left(0).Top(0).Fill()
 	if app.ShowFullScreenLyric && song != nil && !c.Now().Before(app.lyricMotionUntil) {
 		commit := float32(0)
 		_, _, released := card.DragEnded()
@@ -101,19 +113,34 @@ func (app *App) renderArtworkCard(c *ui.Context, size float32) {
 		})
 		shown := card.DragOffset()
 		card.Rotate(max(-8, min(shown.X/size*7, 8)))
+		if preview.Valid() && absArtworkOffset(shown.X) > 0.01 {
+			item, label := next, "下一首封面："
+			if shown.X < 0 {
+				item, label = previous, "上一首封面："
+			}
+			if item != nil {
+				scale := 0.94 + 0.06*min(absArtworkOffset(shown.X)/(size*0.9), 1)
+				var previewBitmap *ui.Bitmap
+				if item.Artwork != "" {
+					previewBitmap = app.Images.Get(item.Artwork)
+				}
+				paint(preview.Label(label+item.Title).Scale(scale, scale), previewBitmap)
+			}
+		}
 		if card.Dragging() {
 			card.Cursor(ui.CursorGrabbing)
 		}
 		if commit != 0 {
 			if commit < 0 {
-				app.Player.Next()
-			} else {
 				app.Player.Prev()
+			} else {
+				app.Player.Next()
 			}
 			current := app.Player.CurrentSong()
 			if current != nil && string(current.Key()) != key {
 				s.songKey = string(current.Key())
 				s.started, s.from, s.outgoing = c.Now(), commit, bitmap
+				s.previewScale = 0.94 + 0.06*min(absArtworkOffset(shown.X)/(size*0.9), 1)
 				s.direction = 1
 				if commit < 0 {
 					s.direction = -1

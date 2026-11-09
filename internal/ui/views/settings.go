@@ -272,7 +272,7 @@ func RenderSettings(
 							ui.Text(c, "下载存储目录:").FontSize(13).TextColor(th.TextSub).Width(110)
 							ui.TextInput(c.Key("dl_path_input"), &state.DownloadPathInput).Grow(1).MinWidth(120)
 
-							saveBtn := components.PrimaryButton(c.Key("dl_path_save"), "保存目录").Cursor(ui.CursorPointer)
+							saveBtn := components.PrimaryButton(c.Key("dl_path_save"), th, "保存目录").Cursor(ui.CursorPointer)
 							if saveBtn.Clicked() {
 								if state.DownloadPathInput != "" {
 									_ = configMgr.UpdateAsync(func(c *store.AppConfig) {
@@ -351,7 +351,7 @@ func RenderSettings(
 						})
 
 						ui.Row(c).Gap(16).Children(func() {
-							if components.PrimaryButton(c.Key("export_btn"), "📤 导出备份 (JSON)").Cursor(ui.CursorPointer).Clicked() {
+							if components.PrimaryButton(c.Key("export_btn"), th, "📤 导出备份 (JSON)").Cursor(ui.CursorPointer).Clicked() {
 								path := state.BackupPath
 								// The file is written on its own goroutine: the disk
 								// is slow and the interface must not wait for it.

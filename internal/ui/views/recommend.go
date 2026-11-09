@@ -141,7 +141,7 @@ func (s *RecommendViewState) Load(pm *plugin.Manager, invalidate func()) {
 		s.mu.Unlock()
 		return
 	}
-	noSources := len(pm.ListPlugins()) == 0
+	noSources := len(pm.DiscoveryPlugins()) == 0
 	if s.pluginRevision != revision {
 		s.songs = nil
 		s.platform = ""
@@ -166,7 +166,7 @@ func (s *RecommendViewState) Load(pm *plugin.Manager, invalidate func()) {
 		var items []plugin.MusicItem
 		var err error
 		if tab == 0 {
-			if inst := pm.GetPlugin(builtin.Platform); inst != nil && inst.HasMethod("getDailyRecommend") {
+			if inst := pm.GetPlugin(builtin.Platform); inst != nil && pm.DiscoveryPlatform() == builtin.Platform && inst.HasMethod("getDailyRecommend") {
 				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 				result, e := inst.GetDailyRecommend(ctx)
 				cancel()
@@ -326,7 +326,7 @@ func RenderRecommend(
 						isFav := len(songs) > 0 && st != nil && st.IsFavorite(hero.Key())
 						favIcon, favLabel, favColor := icons.HeartOutline, "收藏首曲", th.TextMain
 						if isFav {
-							favIcon, favLabel, favColor = icons.Heart, "已收藏首曲", th.Primary
+							favIcon, favLabel, favColor = icons.Heart, "已收藏首曲", th.PrimaryText()
 						}
 						favorite := ui.ButtonBase(c.Key("rec_favorite")).Label(favLabel).Tooltip(favLabel).Size(40, 40).Radius(20).
 							Border(1, th.TextSub.Alpha(0.55)).Center().Disabled(len(songs) == 0 || st == nil).Cursor(ui.CursorPointer).
@@ -380,57 +380,6 @@ func RenderRecommend(
 					})
 				}
 			})
-
-			// ==================== 3.5 Music Source Filter ====================
-			// The songs come from every plugin that is installed, so the
-			// list can be narrowed to one of the sources.
-			platforms := snap.Platforms
-			if len(platforms) > 1 || snap.Source != "" {
-				filter := snap.Source
-				all := append([]PlatformCount{{Name: "", Count: snap.Total}}, platforms...)
-				ui.Row(c).Label("推荐音源筛选").FillWidth().Wrap().AlignItems(ui.Center).Gap(8).Children(func() {
-					ui.Text(c, "音源筛选:").FontSize(12).TextColor(th.TextSub)
-					for _, src := range all {
-						source := src.Name
-						label := fmt.Sprintf("全部 %d", src.Count)
-						key := "rec_src_all"
-						if source != "" {
-							label = fmt.Sprintf("%s %d", source, src.Count)
-							key = "rec_src_" + source
-						}
-						on := source == filter
-						chip := ui.ButtonBase(c.Key(key)).
-							Height(28).MaxWidth(200).Shrink(0).Tooltip(label).
-							Radius(14).
-							Border(1, th.Border).
-							Padding(0, 12).
-							Center().
-							Cursor(ui.CursorPointer).
-							Transition(ui.ElementTransition{Colors: true, Duration: 120 * time.Millisecond, Ease: ui.EaseOut})
-						if on {
-							chip.Background(th.SelectedBg())
-						} else {
-							chip.Background(th.CardBg)
-							if chip.Hovered() {
-								chip.Background(th.HoverBg)
-							}
-						}
-						chip.Children(func() {
-							col := th.TextMain
-							if on {
-								col = th.Primary
-							}
-							ui.Text(c, label).FontSize(11).TextColor(col).SingleLine().Ellipsis("…")
-						})
-						if chip.Clicked() {
-							state.SetPlatformFilter(source)
-							if invalidate != nil {
-								invalidate()
-							}
-						}
-					}
-				})
-			}
 
 			if snap.Loading {
 				if len(songs) == 0 {

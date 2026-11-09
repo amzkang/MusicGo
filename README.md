@@ -6,7 +6,20 @@
 
 项目正在开发中，以兼容 MusicFree 插件协议和备份数据为目标。第三方插件的兼容程度、音源可用性和账号能力取决于具体插件与服务端；当前没有完整的跨平台实机验证结论。
 
-当前以源码发布，尚未提供安装包。欢迎通过 [Issues](https://github.com/amzkang/MusicGo/issues) 反馈问题或提交改进。
+在 [Releases](https://github.com/amzkang/MusicGo/releases/latest) 下载 Windows、macOS 和 Linux 安装包，支持 x64 与 ARM64。欢迎通过 [Issues](https://github.com/amzkang/MusicGo/issues) 反馈问题或提交改进。
+
+## 下载与安装
+
+| 系统 | x64 / Intel | ARM64 / Apple Silicon | 安装方式 |
+| --- | --- | --- | --- |
+| Windows 10 / 11 | `musicgo-setup-版本-amd64.exe` | `musicgo-setup-版本-arm64.exe` | 运行安装程序 |
+| macOS 12+ | `musicgo-版本-amd64.dmg` | `musicgo-版本-arm64.dmg` | 打开 DMG，拖入 Applications |
+| Linux | `musicgo_版本_amd64.deb` | `musicgo_版本_arm64.deb` | Debian / Ubuntu 使用 `sudo apt install ./下载的文件.deb` |
+| 其他 Linux 发行版 | `musicgo-版本-linux-amd64.tar.gz` | `musicgo-版本-linux-arm64.tar.gz` | 解压后运行 `./musicgo` |
+
+Linux 运行库要求见下方构建说明；发布包未包含 FFmpeg，推荐安装 `ffmpeg` 和 `ffprobe` 并加入 `PATH`。附件附带 `SHA256SUMS` 校验文件。
+
+当前 Windows 包未作 Authenticode 签名，macOS 包仅作 ad-hoc 签名、未作 Apple 公证，系统可能显示安全提示。跨平台构建和打包由 GitHub Actions 执行，实机界面、登录和真实播放仍需各平台验证。
 
 ## 功能
 
@@ -48,11 +61,23 @@ $env:MUSICGO_DATA_DIR = ".\.data"
 
 构建产物统一放在 `build/`。仓库不包含本地 Go 工具链、模块缓存或预编译程序，构建不依赖私人路径或本地 `bin/go` 包装脚本。
 
+## 打包与发布
+
+[`mygo.json`](mygo.json) 定义原生应用的名称、版本、图标与系统打包配置。使用项目依赖锁定的 MyGo CLI 打包当前系统：
+
+```sh
+go run github.com/egoist/mygo/cmd/mygo build
+```
+
+通过 `-platform linux/amd64,linux/arm64,windows/amd64,windows/arm64,darwin/amd64,darwin/arm64` 可交叉编译。macOS 签名与 DMG 生成需要在 macOS 执行，Windows 安装程序需要 NSIS（MyGo 在 Windows 上可自动下载）。
+
+更新 `.github/RELEASE_NOTES.md` 和 `mygo.json` 中的版本后推送到 `main`，会触发 [Release 工作流](.github/workflows/release.yml)；也可手动运行工作流或推送与配置版本一致的 `v版本` 标签。六个目标均构建成功后，工作流汇总安装包、生成 SHA-256 校验文件，上传到草稿 Release，再公开发布。已公开版本不会被覆盖。
+
 ## 数据与插件
 
 设置 `MUSICGO_DATA_DIR` 可指定数据目录；未设置时使用系统用户配置目录下的 `MusicGo`。配置、数据库、账号变量和缓存保存在该目录，请勿提交到仓库。
 
-将 MusicFree 插件的 `.js` 文件放入数据目录的 `plugins/` 后启动程序，也可以通过插件页面管理。程序目前内置酷狗概念版插件，首次启动还会检查已有 MusicFree 插件目录并导入插件；内置插件源码位于 `internal/plugin/builtin/`，属于构建必需文件。插件会访问对应平台服务，请只加载可信来源的插件。
+将 MusicFree 插件的 `.js` 文件放入数据目录的 `plugins/` 后启动程序，也可以通过插件页面管理。程序内置酷狗概念版、QQ 音乐和汽水音乐插件，首次启动还会检查已有 MusicFree 插件目录并导入插件；内置插件源码位于 `internal/plugin/builtin/`，属于构建必需文件。QQ 音乐可用微信扫码，汽水音乐可用汽水 App 扫码；多个账号可在插件管理页选择使用。汽水完整音源受接口限制，仅在上游返回可确认的完整、未加密音源时直接播放，否则尝试自动换源。插件会访问对应平台服务，请只加载可信来源的插件。
 
 ## 参与开发
 
@@ -68,6 +93,6 @@ $env:MUSICGO_DATA_DIR = ".\.data"
 - [Lucide](https://lucide.dev/) 与 [Heroicons](https://heroicons.com/)：界面图标，许可与版权声明见[第三方声明](THIRD_PARTY_NOTICES.md)。
 - [goja](https://github.com/dop251/goja)、[esbuild](https://github.com/evanw/esbuild)、[goquery](https://github.com/PuerkitoBio/goquery)、[modernc.org/sqlite](https://pkg.go.dev/modernc.org/sqlite)：插件执行、解析与存储能力；完整依赖见 `go.mod` 和 `go.sum`。
 
-MusicGo 的原创代码（包括 `internal/plugin/builtin/kugou_concept.js`）按 [MIT License](LICENSE) 发布。第三方依赖与素材保留各自的许可，详见[第三方声明](THIRD_PARTY_NOTICES.md)。外部安装的插件不受本项目许可证覆盖。
+MusicGo 的原创代码（包括 `internal/plugin/builtin/` 中的内置插件）按 [MIT License](LICENSE) 发布。第三方依赖与素材保留各自的许可，详见[第三方声明](THIRD_PARTY_NOTICES.md)。外部安装的插件不受本项目许可证覆盖。
 
 MusicGo 与 MusicFree、酷狗及其他音乐服务的官方团队无隶属关系。项目许可证不授予音乐内容、第三方商标或服务接口的使用权；音乐与封面等内容的权利归相应权利人所有。

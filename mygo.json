@@ -1,0 +1,21 @@
+{
+  "name": "MusicGo",
+  "slug": "musicgo",
+  "identifier": "io.github.amzkang.musicgo",
+  "version": "0.1.0",
+  "publisher": "amzkang",
+  "main": "./cmd/musicgo",
+  "icon": "cmd/musicgo/icon.png",
+  "out": "build",
+  "resources": ["LICENSE", "THIRD_PARTY_NOTICES.md", "README.md"],
+  "macos": {
+    "minimumSystemVersion": "12.0"
+  },
+  "linux": {
+    "webview": false,
+    "maintainer": "amzkang <zkang.water@gmail.com>",
+    "comment": "Native GPU music player",
+    "categories": ["AudioVideo", "Audio", "Music"],
+    "depends": ["libepoxy0", "libpulse0", "libasound2 | libasound2t64", "libayatana-appindicator3-1"]
+  }
+}

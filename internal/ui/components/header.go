@@ -188,13 +188,18 @@ func RenderHeader(
 								return
 							}
 							if bm := getImage(account.Logo); bm != nil {
-								ui.Image(c, bm).Size(22, 22).Radius(11).Fit(ui.Cover)
+								avatar.Radius(5.5)
+								ui.Image(c, bm).Size(22, 22).Radius(5.5).Fit(ui.Contain)
 								return
 							}
 						}
 						ui.Icon(c, icons.Headphone).Size(12, 12).TextColor(th.TextSub)
 					})
-					ui.Text(c, account.Nickname).FontSize(12).TextColor(th.TextMain).SingleLine().Ellipsis("…").MaxWidth(96)
+					label := "音源模式"
+					if accountMode != nil && accountMode() {
+						label = account.Platform
+					}
+					ui.Text(c, label).FontSize(12).TextColor(th.TextMain).SingleLine().Ellipsis("…").MaxWidth(96)
 					ui.Icon(c, icons.ChevronDown).Size(10, 10).TextColor(th.TextMuted)
 				})
 			})
@@ -204,11 +209,15 @@ func RenderHeader(
 			renderAccountMenu(c, th, chip, account, accountMenuOpen, accountMode, getImage, onAccountMode, onAccountLogout)
 			ui.Box(c).Width(10).Shrink(0)
 		}
+		if account == nil && !state.Immersive {
+			ui.Text(c, "音源模式").FontSize(12).TextColor(th.TextSub)
+			ui.Box(c).Width(10).Shrink(0)
+		}
 		settings := ui.ButtonBase(c.Key("header_settings")).Label("偏好设置").
 			Size(32, 32).Shrink(0).Radius(16).Center().Cursor(ui.CursorPointer).Tooltip("偏好设置")
 		settingsColor := th.TextMain
 		if state.SettingsActive {
-			settingsColor = th.Primary
+			settingsColor = th.PrimaryText()
 			settings.Background(th.ActiveBg)
 		} else {
 			HoverLights(settings, th)
@@ -335,7 +344,8 @@ func renderAccountMenu(
 							return
 						}
 						if bm := getImage(account.Logo); bm != nil {
-							ui.Image(c, bm).Size(44, 44).Radius(22).Fit(ui.Cover)
+							avatar.Radius(11)
+							ui.Image(c, bm).Size(44, 44).Radius(11).Fit(ui.Contain)
 							return
 						}
 					}
@@ -353,13 +363,13 @@ func renderAccountMenu(
 			ui.Box(c).FillWidth().Height(1).Shrink(0).Background(th.Border)
 
 			useAccount := mode != nil && mode()
-			renderAccountModeRow(c, th, "acct_mode_local", "本地模式", !useAccount, func() {
+			renderAccountModeRow(c, th, "acct_mode_local", "音源模式", !useAccount, func() {
 				*open = false
 				if onMode != nil {
 					onMode(false)
 				}
 			})
-			renderAccountModeRow(c, th, "acct_mode_account", account.Platform, useAccount, func() {
+			renderAccountModeRow(c, th, "acct_mode_account", "平台登录："+account.Platform, useAccount, func() {
 				*open = false
 				if onMode != nil {
 					onMode(true)
@@ -399,12 +409,12 @@ func renderAccountModeRow(c *ui.Context, th *theme.Theme, key, label string, act
 		ui.Row(c).FillWidth().AlignItems(ui.Center).Children(func() {
 			color := th.TextMain
 			if active {
-				color = th.Primary
+				color = th.PrimaryText()
 			}
 			ui.Text(c, label).FontSize(12).TextColor(color)
 			ui.Spacer(c)
 			if active {
-				ui.Icon(c, icons.Check).Size(14, 14).TextColor(th.Primary)
+				ui.Icon(c, icons.Check).Size(14, 14).TextColor(th.PrimaryText())
 			}
 		})
 	})

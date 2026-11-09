@@ -22,8 +22,8 @@ func RenderQualityControl(c *ui.Context, th *theme.Theme, eng *player.Engine, co
 	}
 	tip := "请求音质：" + label
 	if source != "" {
-		tip += "；音源返回：" + source
-		if source == "128" && requested != "low" {
+		tip += "；实际音质：" + source
+		if player.KnownQualityDowngrade(requested, source) {
 			label += " ↓"
 			tip += "（已降级）"
 		}

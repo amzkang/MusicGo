@@ -573,8 +573,8 @@ func (inst *Instance) HasLogin() bool {
 // not change over the instance's life, so it can rebuild a fresh instance.
 func (inst *Instance) Source() string { return inst.rawJS }
 
-// GetLoginQR calls the plugin's getLoginQR hook: the text to draw as a QR
-// code plus the opaque state the host passes back to pollLoginQR.
+// GetLoginQR calls the plugin's getLoginQR hook for QR text or an image URL,
+// plus the opaque state the host passes back to pollLoginQR.
 func (inst *Instance) GetLoginQR(ctx context.Context) (*LoginQR, error) {
 	val, err := inst.callAsync(ctx, "getLoginQR")
 	if err != nil {
@@ -593,8 +593,8 @@ func (inst *Instance) GetLoginQR(ctx context.Context) (*LoginQR, error) {
 	if err := json.Unmarshal(bytesData, &qr); err != nil {
 		return nil, fmt.Errorf("failed to decode login QR: %w", err)
 	}
-	if qr.QRText == "" {
-		return nil, fmt.Errorf("login QR text is empty")
+	if qr.QRText == "" && qr.QRImageURL == "" {
+		return nil, fmt.Errorf("login QR text and image URL are empty")
 	}
 	return &qr, nil
 }

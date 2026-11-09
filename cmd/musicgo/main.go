@@ -357,5 +357,16 @@ func loadStartupPlugins(pluginsDir string, importDirs []string, configMgr *store
 // directory; the platform is known, so its stored variables are injected in
 // a single load.
 func loadBuiltinPlugins(pluginMgr *plugin.Manager) {
-	pluginMgr.LoadPluginSource(string(builtin.KugouConcept), pluginMgr.StoredUserVars(builtin.Platform))
+	for _, entry := range []struct {
+		platform string
+		source   []byte
+	}{
+		{builtin.Platform, builtin.KugouConcept},
+		{"QQ音乐", builtin.QQMusic},
+		{"汽水音乐", builtin.QishuiMusic},
+	} {
+		if _, err := pluginMgr.LoadPluginSource(string(entry.source), pluginMgr.StoredUserVars(entry.platform)); err != nil {
+			log.Printf("MusicGo 内置插件 %s 加载失败: %v", entry.platform, err)
+		}
+	}
 }

@@ -10,15 +10,18 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"musicgo/internal/plugin/builtin"
 )
 
 // Manager coordinates all installed MusicFree plugins
 type Manager struct {
-	mu        sync.RWMutex
-	fileMu    sync.Mutex // serializes file loads, removal, and variable reloads
-	plugins   map[string]*Instance
-	pluginDir string
-	revision  uint64
+	mu                sync.RWMutex
+	fileMu            sync.Mutex // serializes file loads, removal, and variable reloads
+	plugins           map[string]*Instance
+	pluginDir         string
+	revision          uint64
+	discoveryPlatform string
 	// userVarsProvider gives the stored user variables of a platform. It is
 	// injected from the outside, so the plugin layer does not depend on the
 	// store.
@@ -309,19 +312,64 @@ func (m *Manager) Revision() uint64 {
 // UninstallPlugin removes a plugin and cleans up its file on disk
 func (m *Manager) UninstallPlugin(platform string) { _ = m.RemovePlugin(platform) }
 
+// SetDiscoveryPlatform scopes discovery and fallback searches to the active account.
+// An empty platform enables source mode.
+func (m *Manager) SetDiscoveryPlatform(platform string) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.discoveryPlatform == platform {
+		return false
+	}
+	m.discoveryPlatform = platform
+	m.revision++
+	return true
+}
+
+func (m *Manager) DiscoveryPlatform() string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.discoveryPlatform
+}
+
+func isLoginPlatform(platform string) bool {
+	return platform == builtin.Platform || platform == "QQ音乐" || platform == "汽水音乐"
+}
+
+func (m *Manager) discoveryAllowed(platform string) bool {
+	if m.discoveryPlatform != "" {
+		return platform == m.discoveryPlatform
+	}
+	return !isLoginPlatform(platform)
+}
+
+func (m *Manager) DiscoveryPlugins() []PluginMeta {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	var result []PluginMeta
+	for platform, inst := range m.plugins {
+		if m.discoveryAllowed(platform) {
+			result = append(result, inst.Meta())
+		}
+	}
+	sort.Slice(result, func(i, j int) bool { return result[i].Platform < result[j].Platform })
+	return result
+}
+
 // Search searches across specified platforms or all platforms concurrently
 func (m *Manager) Search(ctx context.Context, keyword string, page int, searchType string, platforms ...string) ([]MusicItem, error) {
 	m.mu.RLock()
 	var targets []*Instance
 	if len(platforms) > 0 {
 		for _, p := range platforms {
-			if inst, ok := m.plugins[p]; ok {
+			if inst, ok := m.plugins[p]; ok && m.discoveryAllowed(p) {
 				targets = append(targets, inst)
 			}
 		}
 	} else {
-		for _, inst := range m.plugins {
-			targets = append(targets, inst)
+		for platform, inst := range m.plugins {
+			if m.discoveryAllowed(platform) {
+				targets = append(targets, inst)
+			}
 		}
 	}
 	m.mu.RUnlock()
@@ -351,7 +399,7 @@ func (m *Manager) Search(ctx context.Context, keyword string, page int, searchTy
 			}
 			meta := target.Meta()
 			for i := range res.Data {
-				if res.Data[i].Platform == "" && meta.Platform != "" {
+				if (res.Data[i].Platform == "" || m.DiscoveryPlatform() != "") && meta.Platform != "" {
 					res.Data[i].Platform = meta.Platform
 				}
 			}
@@ -446,8 +494,8 @@ type TopListPlatform struct {
 func (m *Manager) ListTopLists(ctx context.Context) ([]TopListPlatform, error) {
 	m.mu.RLock()
 	var targets []*Instance
-	for _, inst := range m.plugins {
-		if inst.HasTopLists() {
+	for platform, inst := range m.plugins {
+		if (m.discoveryAllowed(platform)) && inst.HasTopLists() {
 			targets = append(targets, inst)
 		}
 	}

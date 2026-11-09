@@ -1,6 +1,10 @@
 package player
 
-import "musicgo/internal/plugin"
+import (
+	"math/rand"
+
+	"musicgo/internal/plugin"
+)
 
 // IDs identify queue occurrences, including repeated copies of the same song.
 // They live for this engine session; saved queues retain their original format.
@@ -16,6 +20,67 @@ type QueueSnapshot struct {
 	Version uint64
 	Mode    Mode
 	State   State
+}
+
+// PreviousSongPreview follows Prev, including shuffle playback history.
+func (e *Engine) PreviousSongPreview() *plugin.MusicItem {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	if e.closed || len(e.queue) == 0 {
+		return nil
+	}
+	index := e.queueIndex - 1
+	if e.mode == ModeShuffle {
+		if e.shuffleCursor <= 0 || e.shuffleCursor >= len(e.shuffleHistory) || e.shuffleHistory[e.shuffleCursor] != e.queueIndex {
+			return nil
+		}
+		index = e.shuffleHistory[e.shuffleCursor-1]
+	} else if index < 0 {
+		index = len(e.queue) - 1
+	}
+	if index < 0 || index >= len(e.queue) {
+		return nil
+	}
+	song := e.queue[index].Song.Clone()
+	return &song
+}
+
+// NextSongPreview follows the manual Next command, including a stable shuffle pick.
+func (e *Engine) NextSongPreview() *plugin.MusicItem {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.closed || len(e.queue) == 0 {
+		return nil
+	}
+	index := e.queueIndex + 1
+	if len(e.nextEntries) > 0 {
+		index = e.queueEntryIndexLocked(e.nextEntries[0])
+	} else {
+		switch e.mode {
+		case ModeRepeatOne, ModeRepeatAll:
+			index %= len(e.queue)
+		case ModeShuffle:
+			e.ensureShuffleCurrentLocked()
+			if e.shuffleCursor+1 < len(e.shuffleHistory) {
+				index = e.shuffleHistory[e.shuffleCursor+1]
+			} else if len(e.queue) == 1 {
+				index = 0
+			} else {
+				if e.shuffleCandidate < 0 || e.shuffleCandidate >= len(e.queue) || e.shuffleCandidate == e.queueIndex {
+					e.shuffleCandidate = rand.Intn(len(e.queue) - 1)
+					if e.shuffleCandidate >= e.queueIndex {
+						e.shuffleCandidate++
+					}
+				}
+				index = e.shuffleCandidate
+			}
+		}
+	}
+	if index < 0 || index >= len(e.queue) {
+		return nil
+	}
+	song := e.queue[index].Song.Clone()
+	return &song
 }
 
 // QueueSnapshot always reads controls together. Entries are copied only when

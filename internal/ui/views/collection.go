@@ -158,7 +158,9 @@ func renderCollectionResults(c *ui.Context, th *theme.Theme, state *SearchViewSt
 				row.Children(func() {
 					ui.Column(c).Grow(1).Gap(4).Children(func() {
 						ui.Text(c, item.Title).FontSize(15).Bold().TextColor(th.TextMain)
-						ui.Text(c, item.Platform).FontSize(12).TextColor(th.TextSub)
+						if item.Artist != "" {
+							ui.Text(c, item.Artist).FontSize(12).TextColor(th.TextSub)
+						}
 					})
 					open = components.Button(c.Key(fmt.Sprintf("collection_open_%d", i)), "打开").Clicked()
 				})
@@ -183,7 +185,7 @@ func renderCollection(c *ui.Context, th *theme.Theme, state *SearchViewState, de
 			if !detail.IsEnd {
 				label = "播放已加载"
 			}
-			if components.PrimaryButton(c.Key("collection_play_all"), label).Disabled(len(detail.Items) == 0 || eng == nil).Clicked() && eng != nil {
+			if components.PrimaryButton(c.Key("collection_play_all"), th, label).Disabled(len(detail.Items) == 0 || eng == nil).Clicked() && eng != nil {
 				eng.SetQueue(detail.Items, 0)
 			}
 		})

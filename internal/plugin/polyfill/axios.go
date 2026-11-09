@@ -11,13 +11,16 @@ import (
 	"io"
 	"mime"
 	"net/http"
+	"net/http/cookiejar"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/dop251/goja"
 	"github.com/dop251/goja_nodejs/eventloop"
 	"golang.org/x/net/html/charset"
+	"golang.org/x/net/publicsuffix"
 )
 
 var defaultHTTPClient = &http.Client{
@@ -45,7 +48,7 @@ func createAxiosModule(vm *goja.Runtime, loop *eventloop.EventLoop, boundary fun
 	}
 	var makeAxios func(defaults map[string]interface{}) goja.Value
 
-	executeRequest := func(reqCfg map[string]interface{}, resolve, reject func(interface{}) error) {
+	executeRequest := func(reqCfg map[string]interface{}, jar http.CookieJar, resolve, reject func(interface{}) error) {
 		go func() {
 			reqURL, _ := reqCfg["url"].(string)
 			if base, ok := reqCfg["baseURL"].(string); ok && base != "" {
@@ -144,6 +147,26 @@ func createAxiosModule(vm *goja.Runtime, loop *eventloop.EventLoop, boundary fun
 					}
 				}
 			}
+			withCredentials, _ := reqCfg["withCredentials"].(bool)
+			redirectLimit, limitSet := reqCfg["maxRedirects"]
+			if withCredentials || limitSet {
+				copy := *client
+				if withCredentials {
+					copy.Jar = jar
+				}
+				if limitSet {
+					limit, err := strconv.Atoi(fmt.Sprint(redirectLimit))
+					if err == nil && limit >= 0 {
+						copy.CheckRedirect = func(_ *http.Request, via []*http.Request) error {
+							if len(via) > limit {
+								return http.ErrUseLastResponse
+							}
+							return nil
+						}
+					}
+				}
+				client = &copy
+			}
 
 			resp, err := client.Do(httpReq)
 			if err != nil {
@@ -171,10 +194,23 @@ func createAxiosModule(vm *goja.Runtime, loop *eventloop.EventLoop, boundary fun
 				}
 			}
 
+			var contentLimit int64
+			if value, ok := reqCfg["maxContentLength"]; ok {
+				contentLimit, _ = strconv.ParseInt(fmt.Sprint(value), 10, 64)
+				if contentLimit > 0 && contentLimit < 1<<62 {
+					reader = io.LimitReader(reader, contentLimit+1)
+				}
+			}
 			respBytes, err := io.ReadAll(reader)
 			if err != nil {
 				runOnLoop(func(v *goja.Runtime) {
 					reject(v.NewGoError(err))
+				})
+				return
+			}
+			if contentLimit > 0 && int64(len(respBytes)) > contentLimit {
+				runOnLoop(func(v *goja.Runtime) {
+					reject(v.NewGoError(fmt.Errorf("response exceeds maxContentLength")))
 				})
 				return
 			}
@@ -209,6 +245,8 @@ func createAxiosModule(vm *goja.Runtime, loop *eventloop.EventLoop, boundary fun
 
 				if responseType == "arraybuffer" {
 					_ = resObj.Set("data", respBytes)
+				} else if responseType == "text" {
+					_ = resObj.Set("data", string(respBytes))
 				} else {
 					// Attempt JSON parse
 					var jsonVal interface{}
@@ -234,6 +272,7 @@ func createAxiosModule(vm *goja.Runtime, loop *eventloop.EventLoop, boundary fun
 	}
 
 	makeAxios = func(defaults map[string]interface{}) goja.Value {
+		jar, _ := cookiejar.New(&cookiejar.Options{PublicSuffixList: publicsuffix.List})
 		axiosFn := func(call goja.FunctionCall) goja.Value {
 			if len(call.Arguments) == 0 {
 				return goja.Undefined()
@@ -259,7 +298,7 @@ func createAxiosModule(vm *goja.Runtime, loop *eventloop.EventLoop, boundary fun
 			}
 
 			promise, resolve, reject := vm.NewPromise()
-			executeRequest(cfg, resolve, reject)
+			executeRequest(cfg, jar, resolve, reject)
 			return vm.ToValue(promise)
 		}
 
@@ -284,7 +323,7 @@ func createAxiosModule(vm *goja.Runtime, loop *eventloop.EventLoop, boundary fun
 				}
 			}
 			promise, resolve, reject := vm.NewPromise()
-			executeRequest(cfg, resolve, reject)
+			executeRequest(cfg, jar, resolve, reject)
 			return vm.ToValue(promise)
 		})
 
@@ -309,11 +348,24 @@ func createAxiosModule(vm *goja.Runtime, loop *eventloop.EventLoop, boundary fun
 				}
 			}
 			promise, resolve, reject := vm.NewPromise()
-			executeRequest(cfg, resolve, reject)
+			executeRequest(cfg, jar, resolve, reject)
 			return vm.ToValue(promise)
 		})
 
 		_ = axiosObj.Set("request", axiosFn)
+		// A jar belongs to this axios instance and is used only for requests
+		// explicitly made with withCredentials. It is never persisted by the host.
+		_ = axiosObj.Set("getCookieHeader", func(address string) string {
+			parsed, err := url.Parse(address)
+			if err != nil || (parsed.Scheme != "https" && parsed.Scheme != "http") || parsed.Host == "" {
+				return ""
+			}
+			req := &http.Request{Header: make(http.Header)}
+			for _, cookie := range jar.Cookies(parsed) {
+				req.AddCookie(cookie)
+			}
+			return req.Header.Get("Cookie")
+		})
 
 		_ = axiosObj.Set("create", func(call goja.FunctionCall) goja.Value {
 			newDefaults := make(map[string]interface{})

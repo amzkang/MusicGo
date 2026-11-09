@@ -665,7 +665,7 @@ func (m *Manager) resolveSource(ctx context.Context, task Task) (*plugin.MediaSo
 	if song.URL != "" {
 		return &plugin.MediaSource{URL: song.URL}, nil
 	}
-	if m.pluginMgr != nil && song.Platform != "local" && strings.TrimSpace(song.Title) != "" {
+	if m.pluginMgr != nil && m.pluginMgr.DiscoveryPlatform() == "" && song.Platform != "local" && strings.TrimSpace(song.Title) != "" {
 		fallbackCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
 		var platforms []string

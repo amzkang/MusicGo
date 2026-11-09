@@ -196,12 +196,13 @@ type UserVariable struct {
 	Default string `json:"default,omitempty"`
 }
 
-// LoginQR is what a plugin's getLoginQR hook returns: the text to render as
-// a QR code, plus the opaque state the host passes back to pollLoginQR.
+// LoginQR is what a plugin's getLoginQR hook returns: QR text or an HTTPS
+// image URL, plus the opaque state the host passes back to pollLoginQR.
 type LoginQR struct {
-	QRText  string `json:"qrText"`
-	State   string `json:"state,omitempty"`
-	Message string `json:"message,omitempty"`
+	QRText     string `json:"qrText"`
+	QRImageURL string `json:"qrImageUrl,omitempty"`
+	State      string `json:"state,omitempty"`
+	Message    string `json:"message,omitempty"`
 }
 
 // LoginPollResult is what a plugin's pollLoginQR hook returns. Status is one

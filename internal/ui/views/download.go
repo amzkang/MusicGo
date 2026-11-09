@@ -130,7 +130,7 @@ func renderDownloadingTab(c *ui.Context, th *theme.Theme, state *DownloadViewSta
 						ui.Row(c).FillWidth().AlignItems(ui.Center).Children(func() {
 							ui.Column(c).Grow(1).MinWidth(0).Gap(4).Children(func() {
 								ui.Text(c, t.Song.Title).FontSize(14).Bold().TextColor(th.TextMain).SingleLine().Ellipsis("…").Tooltip(t.Song.Title)
-								ui.Text(c, t.Song.Artist+" / "+formatPlatform(t.Song.Platform)).FontSize(12).TextColor(th.TextSub).SingleLine().Ellipsis("…")
+								ui.Text(c, t.Song.Artist).FontSize(12).TextColor(th.TextSub).SingleLine().Ellipsis("…")
 							})
 
 							ui.Spacer(c)
@@ -143,7 +143,7 @@ func renderDownloadingTab(c *ui.Context, th *theme.Theme, state *DownloadViewSta
 										dlMgr.PauseTask(t.ID)
 									}
 								} else if t.Status == download.StatusPaused || t.Status == download.StatusFailed || t.Status == download.StatusCanceled {
-									btn := components.PrimaryButton(c.Key("resume"), "继续")
+									btn := components.PrimaryButton(c.Key("resume"), th, "继续")
 									if btn.Clicked() {
 										dlMgr.ResumeTask(t.ID)
 									}
@@ -230,7 +230,7 @@ func renderDownloadedTab(c *ui.Context, th *theme.Theme, state *DownloadViewStat
 	}
 	ui.Column(c).Fill().MinHeight(0).Gap(12).Children(func() {
 		ui.Row(c).FillWidth().Wrap().AlignItems(ui.Center).Gap(10).Children(func() {
-			playAll := components.PrimaryButton(c.Key("dl_play_all"), "播放全部").Disabled(eng == nil || playable == 0)
+			playAll := components.PrimaryButton(c.Key("dl_play_all"), th, "播放全部").Disabled(eng == nil || playable == 0)
 			if playAll.Clicked() && eng != nil {
 				songs := make([]plugin.MusicItem, 0, len(tasks))
 				for _, task := range tasks {
@@ -274,10 +274,10 @@ func renderDownloadedTab(c *ui.Context, th *theme.Theme, state *DownloadViewStat
 			}
 			options.Actions = func(c *ui.Context) {
 				if task.FileAvailable {
-					if components.IconButton(c.Key("play"), th, "播放", icons.Play, th.Primary).Disabled(eng == nil).Clicked() && play != nil {
+					if components.IconButton(c.Key("play"), th, "播放", icons.Play, th.PrimaryText()).Disabled(eng == nil).Clicked() && play != nil {
 						play()
 					}
-				} else if components.IconButton(c.Key("retry"), th, "重新下载", icons.Download, th.Primary).Clicked() {
+				} else if components.IconButton(c.Key("retry"), th, "重新下载", icons.Download, th.PrimaryText()).Clicked() {
 					dlMgr.ResumeTask(task.ID)
 					state.ActiveTab = 0
 				}
@@ -288,27 +288,6 @@ func renderDownloadedTab(c *ui.Context, th *theme.Theme, state *DownloadViewStat
 			renderSongRow(c.Key("download_"+task.ID), th, task.Song, options, getImage)
 		}).FillWidth().Grow(1).MinHeight(0)
 	})
-}
-
-func formatPlatform(plat string) string {
-	switch strings.ToLower(plat) {
-	case "netease", "163":
-		return "网易云"
-	case "qq", "tencent":
-		return "QQ音乐"
-	case "kugou":
-		return "酷狗"
-	case "kuwo":
-		return "酷我"
-	case "bilibili", "bili":
-		return "B站"
-	case "migu":
-		return "咪咕"
-	case "local":
-		return "本地"
-	default:
-		return plat
-	}
 }
 
 func formatBytes(b int64) string {

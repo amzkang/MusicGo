@@ -10,6 +10,7 @@
 !/THIRD_PARTY_NOTICES.md
 !/go.mod
 !/go.sum
+!/mygo.json
 !/.github/
 !/cmd/
 !/internal/

@@ -1,0 +1,125 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+    paths: [mygo.json]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: musicgo-release
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - id: version
+        name: Validate release version
+        run: |
+          python3 - <<'PY'
+          import json, os, re
+          version = json.load(open("mygo.json"))["version"]
+          if not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", version):
+              raise SystemExit("mygo.json must contain a stable major.minor.patch version")
+          ref = os.environ["GITHUB_REF"]
+          if ref.startswith("refs/tags/") and ref != f"refs/tags/v{version}":
+              raise SystemExit("Tag and mygo.json version must match")
+          with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+              output.write(f"version={version}\n")
+          PY
+
+  build:
+    needs: prepare
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { runner: ubuntu-24.04, target: linux/amd64 }
+          - { runner: ubuntu-24.04, target: linux/arm64 }
+          - { runner: windows-2022, target: windows/amd64 }
+          - { runner: windows-2022, target: windows/arm64 }
+          - { runner: macos-15-intel, target: darwin/amd64 }
+          - { runner: macos-15, target: darwin/arm64 }
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    env:
+      CGO_ENABLED: '0'
+      TARGET: ${{ matrix.target }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Package native application
+        run: go run github.com/egoist/mygo/cmd/mygo build -platform "$TARGET"
+      - name: Collect installers
+        run: |
+          directory="build/${TARGET/\//-}"
+          mkdir -p assets
+          case "$TARGET" in
+            windows/*) cp "$directory"/musicgo-setup-*.exe assets/ ;;
+            darwin/*) cp "$directory"/*.dmg assets/ ;;
+            linux/*) cp "$directory"/*.deb "$directory"/*.tar.gz assets/ ;;
+          esac
+      - uses: actions/upload-artifact@v4
+        with:
+          name: musicgo-${{ strategy.job-index }}
+          path: assets/*
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    needs: [prepare, build]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      VERSION: ${{ needs.prepare.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: musicgo-*
+          path: assets
+          merge-multiple: true
+      - name: Verify packages and create checksums
+        working-directory: assets
+        run: |
+          for arch in amd64 arm64; do
+            test -s "musicgo-setup-$VERSION-$arch.exe"
+            test -s "musicgo-$VERSION-$arch.dmg"
+            test -s "musicgo_${VERSION}_$arch.deb"
+            test -s "musicgo-$VERSION-linux-$arch.tar.gz"
+          done
+          sha256sum -- * > SHA256SUMS
+      - name: Publish complete release
+        run: |
+          tag="v$VERSION"
+          if gh release view "$tag" --json isDraft > release-state.json; then
+            python3 -c 'import json; assert json.load(open("release-state.json"))["isDraft"], "Release is already published; bump mygo.json version"'
+          else
+            gh release create "$tag" --target "$GITHUB_SHA" --title "MusicGo $tag" --notes-file .github/RELEASE_NOTES.md --draft
+          fi
+          gh release upload "$tag" assets/* --clobber
+          gh release edit "$tag" --draft=false --latest

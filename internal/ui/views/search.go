@@ -23,7 +23,6 @@ type SearchViewState struct {
 	mu               sync.RWMutex
 	query            string
 	activeTab        int
-	selectedPlatform string
 	isSearching      bool
 	results          []plugin.MusicItem
 	errMsg           string
@@ -42,12 +41,10 @@ type SearchViewState struct {
 type SearchSnapshot struct {
 	Query      string
 	Tab        int
-	Platform   string
 	Searching  bool
 	Error      string
 	Total      int
 	Items      []plugin.MusicItem
-	Sources    []PlatformCount
 	Collection *CollectionSnapshot
 }
 
@@ -58,7 +55,7 @@ func NewSearchViewState() *SearchViewState { return &SearchViewState{} }
 func (s *SearchViewState) Snapshot() SearchSnapshot {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	out := SearchSnapshot{Query: s.query, Tab: s.activeTab, Platform: s.selectedPlatform, Searching: s.isSearching, Error: s.errMsg, Total: len(s.results)}
+	out := SearchSnapshot{Query: s.query, Tab: s.activeTab, Searching: s.isSearching, Error: s.errMsg, Total: len(s.results)}
 	if s.detail != nil {
 		detail := *s.detail
 		detail.Item = detail.Item.Clone()
@@ -66,30 +63,10 @@ func (s *SearchViewState) Snapshot() SearchSnapshot {
 		out.Collection = &detail
 		return out
 	}
-	positions := make(map[string]int)
 	for _, item := range s.results {
-		source := songSourceLabel(item)
-		index, found := positions[source]
-		if !found {
-			index = len(out.Sources)
-			positions[source] = index
-			out.Sources = append(out.Sources, PlatformCount{Name: source})
-		}
-		out.Sources[index].Count++
-		if s.selectedPlatform == "" || s.selectedPlatform == source {
-			out.Items = append(out.Items, item.Clone())
-		}
+		out.Items = append(out.Items, item.Clone())
 	}
 	return out
-}
-
-func (s *SearchViewState) SetSelectedPlatform(platform string) {
-	s.mu.Lock()
-	if s.selectedPlatform != platform {
-		s.List = ui.ListState{}
-	}
-	s.selectedPlatform = platform
-	s.mu.Unlock()
 }
 
 // Close cancels work before plugins are shut down and rejects late results.
@@ -135,7 +112,7 @@ func (s *SearchViewState) PerformSearch(pm *plugin.Manager, query string, tab in
 	s.cancel = cancel
 	s.detail = nil
 	s.detailSeq++
-	s.query, s.activeTab, s.selectedPlatform = query, tab, ""
+	s.query, s.activeTab = query, tab
 	s.isSearching, s.errMsg, s.results = true, "", nil
 	s.List = ui.ListState{}
 	s.seq++
@@ -212,34 +189,6 @@ func RenderSearch(c *ui.Context, th *theme.Theme, state *SearchViewState, pm *pl
 		if renderTabs(c.Key("search_tabs"), &activeTab, "单曲", "专辑", "歌单", "歌手").Changed() {
 			state.PerformSearch(pm, snap.Query, activeTab, invalidate)
 		}
-		if len(snap.Sources) > 0 {
-			ui.Row(c).FillWidth().Wrap().Gap(8).AlignItems(ui.Center).Children(func() {
-				for _, source := range append([]PlatformCount{{Count: snap.Total}}, snap.Sources...) {
-					name := source.Name
-					label := name
-					if name == "" {
-						label = "全部"
-					}
-					label = fmt.Sprintf("%s (%d)", label, source.Count)
-					chip := ui.ButtonBase(c.Key("search_source_"+name)).Label(label).Tooltip(label).Height(28).MaxWidth(200).Shrink(0).Radius(14).Padding(0, 12).Center().Border(1, th.Border).Cursor(ui.CursorPointer)
-					color := th.TextMain
-					if snap.Platform == name {
-						chip.Background(th.SelectedBg())
-						color = th.Primary
-					} else {
-						chip.Background(th.CardBg)
-						components.HoverLights(chip, th)
-					}
-					chip.Children(func() { ui.Text(c, label).FontSize(12).TextColor(color).SingleLine().Ellipsis("…") })
-					if chip.Clicked() {
-						state.SetSelectedPlatform(name)
-						if invalidate != nil {
-							invalidate()
-						}
-					}
-				}
-			})
-		}
 		if snap.Searching {
 			renderSongSkeleton(c, th)
 			return
@@ -257,8 +206,6 @@ func RenderSearch(c *ui.Context, th *theme.Theme, state *SearchViewState, pm *pl
 			message := "未找到相关结果"
 			if snap.Query == "" {
 				message = "输入歌曲、歌手或专辑开始搜索"
-			} else if snap.Total > 0 {
-				message = "当前音源筛选下无结果"
 			}
 			components.EmptyState(c, th, icons.Search, message)
 			return

@@ -307,7 +307,7 @@ func RenderPluginManager(
 						Placeholder("输入 .js 插件文件的绝对路径").
 						TextColor(th.TextMain)
 
-					installBtn := components.PrimaryButton(c.Key("local_plugin_install"), "安装").
+					installBtn := components.PrimaryButton(c.Key("local_plugin_install"), th, "安装").
 						Padding(0, 14).
 						Cursor(ui.CursorPointer)
 					if installBtn.Clicked() {
@@ -355,7 +355,7 @@ func RenderPluginManager(
 									OnChange(func() { state.SetNetworkURL(networkURL) })
 							})
 
-						confirmBtn := components.PrimaryButton(c, "下载并安装").
+						confirmBtn := components.PrimaryButton(c, th, "下载并安装").
 							Padding(0, 12).
 							Cursor(ui.CursorPointer)
 						if confirmBtn.Clicked() && networkURL != "" {
@@ -372,15 +372,26 @@ func RenderPluginManager(
 					})
 			}
 
-			if len(plugins) == 0 {
-				ui.Column(c).FillWidth().Height(150).Radius(16).Background(th.CardBg).Border(1, th.Border).Center().Gap(10).Children(func() {
-					ui.Icon(c, icons.Plugin).Size(28, 28).TextColor(th.TextMuted)
-					ui.Text(c, "还没有安装音源插件").FontSize(14).TextColor(th.TextMain)
-				})
-			} else {
-				ui.Grid(c).FillWidth().Columns(max(1, min(2, int((components.PageContentWidth(c)+16)/276)))).Gap(16).Children(func() {
+			for _, group := range []struct {
+				title   string
+				builtin bool
+			}{{"平台登录", true}, {"音源插件", false}} {
+				ui.Text(c, group.title).FontSize(16).Bold().TextColor(th.TextMain)
+				count := 0
+				for _, meta := range plugins {
+					if pluginMetaIsBuiltin(meta) == group.builtin {
+						count++
+					}
+				}
+				if count == 0 {
+					ui.Text(c, "暂无"+group.title).FontSize(13).TextColor(th.TextMuted)
+					continue
+				}
+				ui.Grid(c).FillWidth().Columns(max(1, min(2, int((components.PageContentWidth(c)+16)/396)))).Gap(16).Children(func() {
 					for _, meta := range plugins {
-						renderPluginCard(c, th, state, meta, pluginMgr, configMgr, getImage, invalidate)
+						if pluginMetaIsBuiltin(meta) == group.builtin {
+							renderPluginCard(c, th, state, meta, pluginMgr, configMgr, getImage, invalidate)
+						}
 					}
 				})
 			}
@@ -406,13 +417,13 @@ func renderPluginCard(c *ui.Context, th *theme.Theme, state *PluginManagerViewSt
 	loginMsg := state.LoginState(name)
 	supportsLogin := pm != nil && pm.SupportsLogin(name)
 	isBuiltin := pluginMetaIsBuiltin(meta)
-	ui.Column(c.Key("plugin_card_"+name)).Label("插件卡片："+name).MinWidth(0).MinHeight(196).Padding(18).Gap(12).
+	ui.Column(c.Key("plugin_card_"+name)).Label("插件卡片："+name).MinWidth(0).MinHeight(164).Padding(18).Gap(12).
 		Background(th.CardBg).Border(1, th.Border).Radius(12).Children(func() {
 		ui.Row(c).FillWidth().AlignItems(ui.Center).Gap(12).Children(func() {
-			logoBox := ui.Box(c).Size(40, 40).Shrink(0).Radius(12).Background(th.Background).Center()
+			logoBox := ui.Box(c).Size(40, 40).Shrink(0).Radius(10).Background(th.Background).Center()
 			logoBox.Children(func() {
 				if bm := getImage(pluginMetaLogo(meta)); bm != nil {
-					ui.Image(c, bm).Size(40, 40).Fit(ui.Cover)
+					ui.Image(c, bm).Size(40, 40).Radius(10).Fit(ui.Contain)
 					return
 				}
 				ui.Icon(c, icons.Plugin).Size(22, 22).TextColor(th.TextSub)
@@ -475,6 +486,16 @@ func renderPluginCard(c *ui.Context, th *theme.Theme, state *PluginManagerViewSt
 						logoutPlugin(state, pm, configMgr, name, invalidate)
 					} else {
 						beginPluginLogin(state, pm, configMgr, name, invalidate)
+					}
+				}
+				if loginMsg != "" && configMgr != nil && pm.SupportsAccountData(name) {
+					useAccount := components.Button(c.Key("use_account_"+name), "使用账号").Padding(0, 12).Cursor(ui.CursorPointer)
+					if useAccount.Clicked() {
+						_ = configMgr.UpdateAsync(func(cfg *store.AppConfig) {
+							cfg.AccountPlatform = name
+							cfg.LibraryMode = "account"
+						})
+						requestLoginRedraw(invalidate)
 					}
 				}
 			}

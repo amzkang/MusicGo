@@ -2,7 +2,6 @@ package views
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/egoist/mygo/ui"
 	"musicgo/internal/download"
@@ -46,9 +45,12 @@ func renderSongRow(c *ui.Context, th *theme.Theme, song plugin.MusicItem, option
 	if width <= 0 {
 		width = components.PageContentWidth(c)
 	}
-	row := ui.Row(c).Label("歌曲："+song.Title+"（"+songSourceLabel(song)+"）").Focusable().FillWidth().
+	row := ui.Row(c).Label("歌曲："+song.Title).Focusable().FillWidth().
 		Height(songRowHeight).Shrink(0).Radius(8).Padding(2, 10).AlignItems(ui.Center).Cursor(ui.CursorPointer).Transition(ui.ElementTransition{Colors: true, Animation: &anim.Quick})
-	details := song.Title + " / " + song.Artist + " / " + song.Album + " / " + songSourceLabel(song)
+	details := song.Title + " / " + song.Artist
+	if song.Album != "" {
+		details += " / " + song.Album
+	}
 	if song.Duration > 0 {
 		seconds := int(song.Duration)
 		details += fmt.Sprintf(" / %02d:%02d", seconds/60, seconds%60)
@@ -75,10 +77,6 @@ func renderSongRow(c *ui.Context, th *theme.Theme, song plugin.MusicItem, option
 		}
 		songIdentity(c, song, th, options, width, getImage)
 		if !options.Preview {
-			if width >= 720 {
-				source := songSourceLabel(song)
-				components.Tooltip(c, ui.Text(c, source).Width(96).Shrink(0).FontSize(11).TextColor(th.TextMuted).SingleLine().Ellipsis("…"), source)
-			}
 			if width >= 560 {
 				text := options.TrailingText
 				if text == "" {
@@ -131,7 +129,7 @@ func songIdentity(c *ui.Context, song plugin.MusicItem, th *theme.Theme, options
 		ui.Column(c).Basis(0).Grow(1).MinWidth(0).Gap(1).Children(func() {
 			color := th.TextMain
 			if options.Current {
-				color = th.Primary
+				color = th.PrimaryText()
 			}
 			components.Tooltip(c, ui.Text(c, song.Title).FillWidth().FontSize(14).LineHeight(1.3).TextColor(color).SingleLine().Ellipsis("…"), song.Title)
 			artist := song.Artist
@@ -140,9 +138,6 @@ func songIdentity(c *ui.Context, song plugin.MusicItem, th *theme.Theme, options
 			}
 			if !options.Preview && song.Album != "" {
 				artist += " / " + song.Album
-			}
-			if !options.Preview && width < 720 {
-				artist += " / " + songSourceLabel(song)
 			}
 			if width < 560 && options.TrailingText != "" {
 				artist += " / " + options.TrailingText
@@ -173,7 +168,7 @@ func renderMusicRow(c *ui.Context, th *theme.Theme, song plugin.MusicItem, optio
 	options.Actions = func(c *ui.Context) {
 		icon, color, label := icons.HeartOutline, th.TextMain, "收藏"
 		if st != nil && st.IsFavorite(song.Key()) {
-			icon, color, label = icons.Heart, th.Primary, "取消收藏"
+			icon, color, label = icons.Heart, th.PrimaryText(), "取消收藏"
 		}
 		fav := components.IconButton(c.Key("favorite"), th, label, icon, color).Disabled(st == nil)
 		if fav.Clicked() && st != nil {
@@ -182,7 +177,7 @@ func renderMusicRow(c *ui.Context, th *theme.Theme, song plugin.MusicItem, optio
 		if !options.Preview {
 			color := th.TextSub
 			if dl != nil && (dl.IsDownloaded(song.Platform, song.ID) || dl.IsDownloading(song.Platform, song.ID)) {
-				color = th.Primary
+				color = th.PrimaryText()
 			}
 			button := components.IconButton(c.Key("download"), th, "下载", icons.Download, color).Disabled(dl == nil || song.Platform == "local")
 			if button.Clicked() && dl != nil {
@@ -200,23 +195,6 @@ func renderMusicRow(c *ui.Context, th *theme.Theme, song plugin.MusicItem, optio
 	renderSongRow(c, th, song, options, getImage)
 }
 
-func songSourceLabel(song plugin.MusicItem) string {
-	if song.Platform == "local" {
-		return "本地"
-	}
-	if song.Platform == "" {
-		return "网络"
-	}
-	return song.Platform
-}
-
-func shortPlatformName(name string) string {
-	if i := strings.Index(name, "("); i > 0 {
-		return name[:i]
-	}
-	return name
-}
-
 func songIndex(c *ui.Context, index int, th *theme.Theme, showPlay bool, play func()) {
 	if !showPlay {
 		ui.Box(c).Width(36).Shrink(0).Center().Children(func() {
@@ -224,7 +202,7 @@ func songIndex(c *ui.Context, index int, th *theme.Theme, showPlay bool, play fu
 		})
 		return
 	}
-	button := components.IconButton(c, th, "播放歌曲", icons.Play, th.Primary).Width(36).Disabled(play == nil)
+	button := components.IconButton(c, th, "播放歌曲", icons.Play, th.PrimaryText()).Width(36).Disabled(play == nil)
 	if button.Clicked() && play != nil {
 		play()
 	}

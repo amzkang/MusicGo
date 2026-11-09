@@ -123,6 +123,11 @@ func NewApp(
 	_ = cm.UpdateAsync(func(cfg *store.AppConfig) { cfg.DesktopLyric.Enabled = false })
 	cfg := cm.Get()
 	th := theme.FromConfig(cfg)
+	platform := activePlatform(cfg)
+	th.SetPlatformAccent(platform)
+	if pm != nil {
+		pm.SetDiscoveryPlatform(platform)
+	}
 
 	deskLyric := NewDesktopLyricWindow(eng, th, cm)
 
@@ -281,10 +286,18 @@ func (app *App) setActiveLyric(parsed *lyric.ParsedLyric) {
 	app.lyricMu.Unlock()
 }
 
+func activePlatform(cfg store.AppConfig) string {
+	if cfg.LibraryMode == "local" {
+		return ""
+	}
+	return cfg.AccountPlatform
+}
+
 // ApplyTheme switches the interface to the theme the configuration names.
 func (app *App) ApplyTheme() {
 	cfg := app.ConfigMgr.SettingsSnapshot()
 	th := theme.FromConfig(cfg)
+	th.SetPlatformAccent(activePlatform(cfg))
 	app.Theme = th
 	if app.DesktopLyric != nil {
 		app.DesktopLyric.SetTheme(th)
@@ -421,6 +434,12 @@ func (app *App) Close() {
 
 // View is the top-level MyGo native GPU rendering loop
 func (app *App) View(c *ui.Context) {
+	if app.PluginMgr != nil && app.PluginMgr.SetDiscoveryPlatform(activePlatform(app.ConfigMgr.SettingsSnapshot())) {
+		app.ApplyTheme()
+		if snap := app.SearchState.Snapshot(); snap.Query != "" {
+			app.SearchState.PerformSearch(app.PluginMgr, snap.Query, snap.Tab, app.requestRedraw)
+		}
+	}
 	components.TrackTooltips(c)
 	zoomLevels := [...]float32{0.8, 0.9, 1, 1.1, 1.25, 1.5}
 	switch {
@@ -636,7 +655,7 @@ func (app *App) renderHeader(c *ui.Context, immersive bool) {
 		th = th.ForLyrics()
 	}
 
-	app.AccountState.MaybeRefresh(app.PluginMgr, app.requestRedraw)
+	app.AccountState.MaybeRefresh(app.PluginMgr, app.ConfigMgr, app.requestRedraw)
 	var accountChip *components.AccountChip
 	if data := app.AccountState.Chip(); data != nil {
 		accountChip = &components.AccountChip{
@@ -785,7 +804,7 @@ func (app *App) renderActiveView(c *ui.Context) {
 		// 登录状态）时，「我的音乐」显示云端歌单；本地模式与从前完全一样。
 		mode := app.ConfigMgr.LibraryModeValue()
 		if (mode == "account" || mode == "") && app.AccountState.LoggedIn() {
-			views.RenderAccountLibrary(c, app.Theme, app.AccountState, app.Player, app.PluginMgr, app.Store, app.DownloadMgr, app.Images.Get, app.requestRedraw)
+			views.RenderAccountLibrary(c, app.Theme, app.AccountState, app.Player, app.PluginMgr, app.ConfigMgr, app.Store, app.DownloadMgr, app.Images.Get, app.requestRedraw)
 			return
 		}
 		app.PlaylistState.SelectedPlaylistID = app.SelectedPlaylistID
