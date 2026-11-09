@@ -5,7 +5,7 @@ MusicGo 首个跨平台二进制版本，使用 Go + MyGo 原生 GPU 渲染，�
 | 系统 | 架构 | 下载文件 |
 | --- | --- | --- |
 | Windows 10 / 11 | x64 / ARM64 | `musicgo-setup-版本-amd64.exe` / `musicgo-setup-版本-arm64.exe` |
-| macOS 12+ | Intel / Apple Silicon | `musicgo-版本-amd64.dmg` / `musicgo-版本-arm64.dmg` |
+| macOS 13+ | Intel / Apple Silicon | `musicgo-版本-amd64.dmg` / `musicgo-版本-arm64.dmg` |
 | Linux | x64 / ARM64 | `musicgo_版本_架构.deb` 或 `musicgo-版本-linux-架构.tar.gz` |
 
 Windows 运行安装程序；macOS 打开 DMG 并将 MusicGo 拖入 Applications；Debian / Ubuntu 使用 `sudo apt install ./musicgo_*.deb` 安装匹配架构的文件；其他 Linux 发行版可解压压缩包后运行 `./musicgo`。

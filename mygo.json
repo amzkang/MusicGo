@@ -9,7 +9,7 @@
   "out": "build",
   "resources": ["LICENSE", "THIRD_PARTY_NOTICES.md", "README.md"],
   "macos": {
-    "minimumSystemVersion": "12.0"
+    "minimumSystemVersion": "13.0"
   },
   "linux": {
     "webview": false,

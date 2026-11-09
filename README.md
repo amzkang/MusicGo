@@ -13,7 +13,7 @@
 | 系统 | x64 / Intel | ARM64 / Apple Silicon | 安装方式 |
 | --- | --- | --- | --- |
 | Windows 10 / 11 | `musicgo-setup-版本-amd64.exe` | `musicgo-setup-版本-arm64.exe` | 运行安装程序 |
-| macOS 12+ | `musicgo-版本-amd64.dmg` | `musicgo-版本-arm64.dmg` | 打开 DMG，拖入 Applications |
+| macOS 13+ | `musicgo-版本-amd64.dmg` | `musicgo-版本-arm64.dmg` | 打开 DMG，拖入 Applications |
 | Linux | `musicgo_版本_amd64.deb` | `musicgo_版本_arm64.deb` | Debian / Ubuntu 使用 `sudo apt install ./下载的文件.deb` |
 | 其他 Linux 发行版 | `musicgo-版本-linux-amd64.tar.gz` | `musicgo-版本-linux-arm64.tar.gz` | 解压后运行 `./musicgo` |
 
